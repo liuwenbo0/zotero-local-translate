@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 
 PROTOCOL = sys.stdout
 SECRETS = []
+ANONYMOUS_API_KEY = "workload-identity-auth"
 
 
 def emit(kind, **data):
@@ -43,6 +44,39 @@ def remember_secrets(data):
             and any(s in field.lower() for s in ("key", "secret", "token", "password"))
         ):
             SECRETS.append(value)
+
+
+def install_openai_compatibility():
+    from openai import OpenAI
+    from openai._base_client import BaseClient
+
+    validate_headers = OpenAI._validate_headers
+    if not getattr(validate_headers, "_local_translate_headers", False):
+        def validate_compatible_headers(self, headers, custom_headers):
+            if self.api_key == ANONYMOUS_API_KEY:
+                headers.pop("Authorization", None)
+                return
+            return validate_headers(self, headers, custom_headers)
+
+        validate_compatible_headers._local_translate_headers = True
+        OpenAI._validate_headers = validate_compatible_headers
+
+    build_headers = BaseClient._build_headers
+    if not getattr(build_headers, "_local_translate_headers", False):
+        def build_compatible_headers(self, options, *, retries_taken=0):
+            headers = build_headers(self, options, retries_taken=retries_taken)
+            if urlsplit(str(self.base_url)).hostname == "index-translate.bilibili.com":
+                headers["User-Agent"] = "Index-Translate-Client/1.0"
+                for header in list(headers.keys()):
+                    if header.lower().startswith(("x-stainless-", "x-request-id")):
+                        headers.pop(header, None)
+            return headers
+
+        build_compatible_headers._local_translate_headers = True
+        BaseClient._build_headers = build_compatible_headers
+
+
+install_openai_compatibility()
 
 
 def reasoning_options(cfg, base_url):
@@ -113,9 +147,8 @@ def build_settings(payload):
     from pdf2zh_next.config.model import SettingsModel
     from pdf2zh_next.config.translate_engine_model import OpenAISettings
 
-    key = payload.get("apiKey", "")
-    if not key:
-        raise ValueError("请在翻译服务中填写 API 密钥")
+    # The SDK accepts this sentinel but omits Authorization from requests.
+    key = payload.get("apiKey", "") or ANONYMOUS_API_KEY
     settings = SettingsModel(
         translate_engine_settings=OpenAISettings(
             openai_base_url=cfg["baseURL"],

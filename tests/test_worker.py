@@ -2,6 +2,7 @@ import importlib.util
 import asyncio
 import hashlib
 import json
+import multiprocessing
 import os
 from pathlib import Path
 import shutil
@@ -15,6 +16,39 @@ spec = importlib.util.spec_from_file_location(
 )
 worker = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(worker)
+
+
+def _check_spawned_bilibili_request(headers_queue):
+    import httpx
+    from openai import OpenAI
+
+    def respond(request):
+        headers_queue.put(dict(request.headers))
+        return httpx.Response(
+            200,
+            json={
+                "id": "chatcmpl-test",
+                "object": "chat.completion",
+                "created": 1,
+                "model": "test",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "OK"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            },
+        )
+
+    with OpenAI(
+        base_url="https://index-translate.bilibili.com/v1",
+        api_key=worker.ANONYMOUS_API_KEY,
+        http_client=httpx.Client(transport=httpx.MockTransport(respond)),
+    ) as client:
+        client.chat.completions.create(
+            model="test", messages=[{"role": "user", "content": "OK"}]
+        )
 
 
 class WorkerTests(unittest.TestCase):
@@ -147,6 +181,69 @@ class WorkerTests(unittest.TestCase):
         self.assertFalse(s.pdf.no_mono)
         self.assertFalse(s.pdf.no_dual)
         self.assertIsNone(s.pdf.pages)
+
+    def test_bilibili_requests_omit_auth_and_openai_fingerprint_headers(self):
+        import httpx
+        from openai import OpenAI
+
+        requests = []
+
+        def respond(request):
+            requests.append(request)
+            return httpx.Response(
+                200,
+                json={
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion",
+                    "created": 1,
+                    "model": "Index-Translate-35B-A3B",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "OK"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                },
+            )
+
+        payload = self.payload(
+            baseURL="https://index-translate.bilibili.com/v1",
+            model="Index-Translate-35B-A3B",
+        )
+        payload["apiKey"] = ""
+        worker.build_settings(payload)
+        with OpenAI(
+            base_url=payload["config"]["baseURL"],
+            api_key=worker.ANONYMOUS_API_KEY,
+            http_client=httpx.Client(transport=httpx.MockTransport(respond)),
+        ) as client:
+            client.chat.completions.create(
+                model=payload["config"]["model"],
+                messages=[{"role": "user", "content": "Reply only: OK"}],
+                max_tokens=128,
+            )
+
+        self.assertEqual(len(requests), 1)
+        headers = requests[0].headers
+        self.assertNotIn("authorization", headers)
+        self.assertEqual(headers["user-agent"], "Index-Translate-Client/1.0")
+        self.assertFalse(any(name.startswith("x-stainless-") for name in headers))
+
+    def test_spawned_translation_process_installs_bilibili_compatibility(self):
+        context = multiprocessing.get_context("spawn")
+        headers_queue = context.Queue()
+        process = context.Process(
+            target=_check_spawned_bilibili_request, args=(headers_queue,)
+        )
+        process.start()
+        headers = headers_queue.get(timeout=15)
+        process.join(timeout=15)
+
+        self.assertEqual(process.exitcode, 0)
+        self.assertNotIn("authorization", headers)
+        self.assertEqual(headers["user-agent"], "Index-Translate-Client/1.0")
+        self.assertFalse(any(name.startswith("x-stainless-") for name in headers))
 
     def test_compatibility_overrides_rich_text_and_force_ocr_is_distinct(self):
         s = worker.build_settings(

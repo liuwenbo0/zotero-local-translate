@@ -54,6 +54,16 @@ function fixture() {
   return { plugin, items, parent, attachment, settings, zotero, context, prompts: () => prompts };
 }
 
+test('task list pins active work above FIFO queued jobs and newest history', () => {
+  const jobs = [
+    {id:'old',status:'completed'}, {id:'first',status:'queued'}, {id:'failed',status:'failed'},
+    {id:'second',status:'queued'}, {id:'active',status:'running'},
+  ];
+  const context = vm.createContext({ plugin: { jobs }, $() {} });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/ui/tasks.js'), 'utf8'), context);
+  assert.deepEqual(Array.from(context.TaskView.orderedJobs(), job => job.id), ['active', 'first', 'second', 'failed', 'old']);
+});
+
 test('translation recognition excludes outputs without excluding papers about machine translation', () => {
   const f = fixture();
   assert.equal(f.plugin.isTranslation(f.attachment(1, 'SOURCE01', 1, 'Machine Translation.pdf')), false);

@@ -66,7 +66,7 @@ Object.defineProperties(LocalTranslate, Object.getOwnPropertyDescriptors({
     if (!settings.langOut || !settings.langIn) throw new Error("请填写源语言和目标语言");
     const url = new URL(settings.baseURL);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error("API 地址须为 HTTP(S) base URL");
-    if (!settings.model.trim() || (!key && !(await this.getKey()))) throw new Error("请填写模型和 API 密钥");
+    if (!settings.model.trim()) throw new Error("请填写模型");
     settings.baseURL = settings.baseURL.trim().replace(/\/chat\/completions\/?$/, "").replace(/\/$/, "");
     if (key !== undefined) {
       const old = Services.logins.findLogins("chrome://localtranslate", null, "API key");

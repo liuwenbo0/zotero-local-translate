@@ -4,8 +4,18 @@ var TaskView = {
   rows: new Map(), selectedIDs: new Set(), selectedID: null, anchorID: null, actionState: "",
   labels: { queued: "等待", running: "翻译中", importing: "保存附件", completed: "已完成", skipped: "已跳过", failed: "失败", cancelled: "已取消", interrupted: "待恢复" },
 
+  orderedJobs() {
+    const index = new Map(plugin.jobs.map((job, i) => [job, i]));
+    const group = job => ["running", "importing"].includes(job.status) ? 0 : job.status === "queued" ? 1 : job.status === "interrupted" ? 2 : 3;
+    return [...plugin.jobs].sort((a, b) => {
+      const aGroup = group(a), order = aGroup - group(b);
+      return order || (aGroup === 3 ? index.get(b) - index.get(a) : index.get(a) - index.get(b));
+    });
+  },
+
   render() {
-    const jobs = [...plugin.jobs].reverse();
+    const jobs = this.orderedJobs();
+    this.visibleJobs = jobs;
     const counts = {};
     for (const job of jobs) counts[job.status] = (counts[job.status] || 0) + 1;
     const pending = (counts.queued || 0) + (counts.interrupted || 0);
@@ -78,7 +88,7 @@ var TaskView = {
   },
   selectAll(selected = true) { this.selectedIDs = new Set(selected ? plugin.jobs.map(j => j.id) : []); this.render(); },
   range(id) {
-    const ids = [...plugin.jobs].reverse().map(j => j.id);
+    const ids = (this.visibleJobs || this.orderedJobs()).map(j => j.id);
     let anchor = ids.indexOf(this.anchorID); if (anchor < 0) anchor = ids.indexOf(this.selectedID);
     const end = ids.indexOf(id);
     this.selectedIDs = new Set(ids.slice(Math.min(anchor, end), Math.max(anchor, end) + 1));

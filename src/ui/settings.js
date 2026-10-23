@@ -152,7 +152,7 @@ var SettingsView = {
     return settings;
   },
 
-  save() { return this.plugin.savePreferences(this.values(), this.$("apiKey").value || undefined); },
+  save() { return this.plugin.savePreferences(this.values(), this.$("apiKey").value.trim() || undefined); },
 
   testEngine(action) {
     if (this.plugin.running || this.plugin.workerTask || this.plugin.engineStatus?.busy) {
@@ -161,7 +161,7 @@ var SettingsView = {
     }
     this.message("");
     const settings = action === "probe" ? undefined : this.values();
-    const key = action === "probe" ? undefined : this.$("apiKey").value || undefined;
+    const key = action === "probe" ? undefined : this.$("apiKey").value.trim() || undefined;
     // No long-lived promise callbacks in a preference sandbox that Zotero may destroy.
     this.plugin.checkEngine(action, settings, key);
   },

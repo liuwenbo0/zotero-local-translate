@@ -1,0 +1,348 @@
+/* A centered pane with its own scroll area; native search keeps normal document flow. */
+#prefs-content > .local-translate-preferences {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 744px;
+  min-height: 0;
+  flex: 1;
+  align-self: center;
+  margin: 0 auto;
+  padding: 16px 28px 0;
+}
+
+#prefs-content > .local-translate-preferences > h1 {
+  flex: none;
+  margin: 0 0 12px;
+}
+
+#local-translate-settings {
+  --label-width: 96px;
+  --field-gap: 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+#local-translate-settings .settings-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+#local-translate-settings .settings-nav {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  flex: none;
+  gap: 4px;
+  border-bottom: 1px solid var(--color-border50, ThreeDShadow);
+  margin-bottom: 14px;
+}
+#local-translate-settings .settings-nav button {
+  min-width: 0;
+  min-height: 34px;
+  padding: 4px;
+  text-align: center;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+}
+#local-translate-settings .settings-nav button[aria-selected="true"] {
+  border-bottom-color: var(--accent-blue, Highlight);
+  font-weight: 600;
+}
+
+#local-translate-settings-form {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 2px 12px 8px 2px;
+  scrollbar-gutter: stable;
+}
+
+#local-translate-settings .settings-description {
+  margin: 0 0 16px;
+  color: var(--fill-secondary, GrayText);
+  font-size: 0.92em;
+  line-height: 1.5;
+}
+
+#local-translate-settings .settings-group {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border50, ThreeDShadow);
+}
+
+#local-translate-settings section[role="tabpanel"] > .settings-group:first-of-type {
+  margin-top: 0;
+  border: 0;
+  padding-top: 0;
+}
+
+#local-translate-settings .settings-description + .settings-group {
+  margin-top: 0;
+  padding-top: 0;
+  border: 0;
+}
+
+#local-translate-settings .settings-group h3 {
+  margin: 0 0 9px;
+  font-size: 1em;
+  font-weight: 600;
+}
+
+#local-translate-settings .form-row {
+  display: grid;
+  grid-template-columns: var(--label-width) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--field-gap);
+  margin: 11px 0;
+}
+
+#local-translate-settings .form-row > label {
+  padding-block: 6px;
+  line-height: 1.4;
+  text-align: end;
+  font-size: 0.92em;
+}
+
+#local-translate-settings .field {
+  min-width: 0;
+}
+
+#local-translate-settings .field input,
+#local-translate-settings .field select,
+#local-translate-settings .field textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 1px solid var(--color-border, ThreeDShadow);
+  border-radius: 3px;
+  color: var(--fill-primary, CanvasText);
+  background: var(--color-background, Field);
+}
+
+#local-translate-settings .field textarea {
+  resize: vertical;
+}
+
+#local-translate-settings .field-hint {
+  margin: 7px 0 0;
+  color: var(--fill-secondary, GrayText);
+  font-size: 0.88em;
+  line-height: 1.5;
+}
+
+#local-translate-settings .check-row {
+  margin: 11px 0;
+  margin-inline-start: calc(var(--label-width) + var(--field-gap));
+}
+
+#local-translate-settings .check {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 0.95em;
+  line-height: 1.5;
+}
+
+#local-translate-settings .check input {
+  margin: 3px 0 0;
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+#local-translate-settings .check-row .field-hint {
+  margin-inline-start: 21px;
+}
+
+#local-translate-settings #local-translate-custom-api {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+
+#local-translate-settings .inline-actions,
+#local-translate-settings .engine-info {
+  margin-inline-start: calc(var(--label-width) + var(--field-gap));
+}
+#local-translate-settings .inline-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px 12px;
+}
+#local-translate-settings .inline-actions .field-hint {
+  flex: 1 1 220px;
+  min-width: 180px;
+  margin: 0;
+}
+#local-translate-settings .engine-info p {
+  font-size: 0.92em;
+  line-height: 1.5;
+}
+#local-translate-settings .engine-info button {
+  margin-top: 16px;
+}
+
+#local-translate-settings .settings-actions {
+  flex: none;
+  padding: 10px 0 12px;
+  border-top: 1px solid var(--color-border50, ThreeDShadow);
+  background: var(--material-sidepane, Canvas);
+}
+#local-translate-settings .save-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+#local-translate-settings .secondary {
+  color: var(--fill-secondary, GrayText);
+  font-size: 0.88em;
+}
+#local-translate-settings .engine-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 5px;
+  font-size: 0.92em;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+#local-translate-settings #local-translate-engine-state {
+  margin-bottom: 8px;
+}
+#local-translate-settings #local-translate-engine-percent {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+#local-translate-settings-notice {
+  margin: 0;
+  font-size: 0.92em;
+}
+#local-translate-settings .error {
+  color: var(--color-invalid, #b81d29);
+}
+#local-translate-settings button {
+  font: inherit;
+  min-height: 26px;
+  margin: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--color-border, ThreeDShadow);
+  border-radius: 4px;
+  color: inherit;
+  background: var(--color-button, ButtonFace);
+  cursor: default;
+}
+#local-translate-settings button:disabled {
+  opacity: 0.45;
+}
+#local-translate-settings input,
+#local-translate-settings select,
+#local-translate-settings textarea {
+  font: inherit;
+}
+#local-translate-settings :focus-visible {
+  outline: 2px solid var(--accent-blue, Highlight);
+  outline-offset: 2px;
+}
+#local-translate-settings .primary {
+  color: var(--accent-white, white);
+  border: 1px solid var(--accent-blue, Highlight);
+  border-radius: 4px;
+  background: var(--accent-blue, Highlight);
+}
+#local-translate-settings [hidden] {
+  display: none !important;
+}
+
+#local-translate-settings input[type="number"] {
+  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 34px;
+  padding-inline: 9px 14px;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-background, Field);
+  color-scheme: light dark;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+#local-translate-settings .number-control {
+  display: inline-flex;
+  width: 144px;
+  max-width: 100%;
+  min-height: 34px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--color-border, ThreeDShadow);
+  border-radius: 3px;
+  background: var(--color-background, Field);
+}
+#local-translate-settings .number-control:focus-within {
+  border-color: var(--accent-blue, Highlight);
+  outline: 2px solid var(--accent-blue, Highlight);
+  outline-offset: 1px;
+}
+#local-translate-settings .number-control-buttons {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 27px;
+  margin-inline-start: 4px;
+  border-inline-start: 1px solid var(--color-border, ThreeDShadow);
+  background: var(--color-button, ButtonFace);
+}
+#local-translate-settings .number-control-button {
+  display: block;
+  flex: 1 1 50%;
+  min-width: 27px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--fill-primary, CanvasText);
+  background: transparent;
+  font-size: 0.65em;
+  line-height: 1;
+}
+#local-translate-settings .number-control-button + .number-control-button {
+  border-top: 1px solid var(--color-border50, ThreeDShadow);
+}
+#local-translate-settings .number-control-button:hover {
+  background: var(--color-button-hover, ButtonHighlight);
+}
+#local-translate-langIn,
+#local-translate-langOut {
+  max-width: 180px;
+}
+
+#prefs-content > .local-translate-preferences[data-searching="true"],
+.local-translate-preferences[data-searching="true"] #local-translate-settings,
+.local-translate-preferences[data-searching="true"] .settings-layout,
+.local-translate-preferences[data-searching="true"] #local-translate-settings-form {
+  flex: none;
+  min-height: auto;
+  overflow: visible;
+}
+
+@media (max-width: 760px) {
+  #prefs-content > .local-translate-preferences {
+    padding-inline: 24px;
+  }
+  #local-translate-settings {
+    --label-width: 84px;
+    --field-gap: 12px;
+  }
+}

@@ -1,0 +1,105 @@
+/* Zotero supplies theme tokens, system typography and native control defaults. */
+:root {
+  color-scheme: light dark;
+  color: var(--fill-primary, CanvasText);
+  background: var(--color-background, Canvas);
+}
+
+window {
+  display: flex;
+  min-width: 640px;
+  min-height: 440px;
+}
+
+.translate-window {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  font: inherit;
+  color: var(--fill-primary, CanvasText);
+  background: var(--material-background, Canvas);
+}
+
+.window-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--color-border50, ThreeDShadow);
+  background: var(--color-toolbar, Canvas);
+}
+.window-header h1 {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 600;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  margin: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--color-border, ThreeDShadow);
+  border-radius: 4px;
+  color: inherit;
+  background: var(--color-button, ButtonFace);
+  cursor: default;
+  line-height: 1.2;
+  text-align: center;
+}
+
+button:hover:not(:disabled) {
+  background: var(--color-quinary-on-background, ButtonFace);
+}
+
+button:active:not(:disabled) {
+  background: var(--color-quarternary-on-background, ButtonFace);
+}
+
+button:disabled {
+  opacity: 0.45;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-blue, Highlight);
+  outline-offset: 2px;
+}
+
+#version {
+  align-self: center;
+  margin-inline-start: auto;
+  color: var(--fill-secondary, GrayText);
+  font-size: 0.9em;
+}
+
+.primary {
+  color: var(--accent-white, white);
+  border-color: var(--accent-blue, Highlight);
+  background: var(--accent-blue, Highlight);
+}
+
+.primary:hover:not(:disabled),
+.primary:active:not(:disabled) {
+  color: var(--accent-white, white);
+  background: var(--accent-blue, Highlight);
+  filter: brightness(1.08);
+}
+
+#message {
+  padding: 12px 24px;
+  border-top: 1px solid var(--color-border, ThreeDShadow);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+[hidden] {
+  display: none !important;
+}

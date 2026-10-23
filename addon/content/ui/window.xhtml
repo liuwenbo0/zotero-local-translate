@@ -1,0 +1,45 @@
+<?xml version="1.0" ?>
+<?xml-stylesheet href="chrome://global/skin/global.css" type="text/css"?>
+<?xml-stylesheet href="chrome://zotero/skin/preferences.css" type="text/css"?>
+<?xml-stylesheet href="chrome://localtranslate/content/ui/window.css" type="text/css"?>
+<?xml-stylesheet href="chrome://localtranslate/content/ui/tasks.css" type="text/css"?>
+<?xml-stylesheet href="chrome://localtranslate/content/ui/progress.css" type="text/css"?>
+<window xmlns="http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul" xmlns:h="http://www.w3.org/1999/xhtml" title="本地 PDF 翻译" windowtype="localtranslate:window" width="940" height="650" minwidth="640" minheight="440">
+  <script src="chrome://zotero/content/include.js"/>
+  <script src="chrome://localtranslate/content/ui/tasks.js"/>
+  <script src="chrome://localtranslate/content/ui/window.js"/>
+  <h:main class="translate-window">
+    <h:header class="window-header"><h:h1>翻译任务</h:h1><h:span id="version"/><h:button id="open-settings">设置…</h:button></h:header>
+    <h:section id="tasks" aria-label="翻译任务">
+      <h:div class="toolbar">
+        <h:div class="queue-status"><h:span id="summary" role="status" aria-live="polite"/><h:span id="queue-state"/></h:div>
+        <h:span class="spacer"/>
+        <h:button id="pause">暂停队列</h:button>
+        <h:button id="clear-queue">清空队列</h:button>
+      </h:div>
+      <h:section id="task-detail" aria-labelledby="detail-title" hidden="hidden">
+        <h:div class="detail-heading"><h:h2 id="detail-title"/><h:span id="detail-status"/></h:div>
+        <h:div class="detail-progress"><h:progress id="detail-progress" class="local-translate-progress" max="100"/><h:span id="detail-percent"/></h:div>
+        <h:p id="detail-stage"/>
+        <h:details id="detail-error" class="job-error" hidden="hidden"><h:summary>错误详情</h:summary><h:pre id="detail-error-text"/></h:details>
+      </h:section>
+      <h:div id="empty">
+        <h:p>尚无翻译任务</h:p>
+        <h:p class="hint">在 Zotero 中选中文献或 PDF，然后点击“翻译选中条目”。</h:p>
+      </h:div>
+      <h:div class="table-wrap">
+        <h:table id="task-table" role="grid" tabindex="0" aria-label="翻译任务列表" aria-multiselectable="true">
+          <h:thead><h:tr>
+            <h:th scope="col" class="selection-column"><h:input id="select-all" type="checkbox" aria-label="全选任务" title="全选 / 取消全选"/></h:th><h:th scope="col">文献</h:th><h:th scope="col">目标语言</h:th><h:th scope="col">状态</h:th>
+          </h:tr></h:thead>
+          <h:tbody id="job-list"/>
+        </h:table>
+      </h:div>
+      <h:div class="task-footer">
+        <h:span id="selection-hint">选择任务可查看详情</h:span>
+        <h:div id="task-actions"/>
+      </h:div>
+    </h:section>
+    <h:div id="message" role="status" hidden="hidden"/>
+  </h:main>
+</window>

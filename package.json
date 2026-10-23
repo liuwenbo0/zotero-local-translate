@@ -1,0 +1,9 @@
+{
+  "name": "zotero-local-translate",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "test": "node --test tests/plugin.test.cjs",
+    "build": "python3 tools/build.py"
+  }
+}

@@ -1,0 +1,25 @@
+/* Scoped to the plugin: the preferences document also contains native panes. */
+.local-translate-progress {
+  display: block;
+  width: 100%;
+  height: 5px;
+  appearance: none;
+  overflow: hidden;
+  border: 0;
+  border-radius: 3px;
+  background: var(--fill-quarternary, #dedede);
+}
+.local-translate-progress::-moz-progress-bar { background: var(--accent-blue, Highlight); }
+.local-translate-progress::-webkit-progress-bar { background: var(--fill-quarternary, #dedede); }
+.local-translate-progress::-webkit-progress-value { background: var(--accent-blue, Highlight); }
+.local-translate-progress:indeterminate {
+  background: linear-gradient(var(--accent-blue, Highlight), var(--accent-blue, Highlight)) no-repeat,
+    var(--fill-quarternary, #dedede);
+  background-size: 30% 100%;
+  animation: local-translate-wait 1.5s ease-in-out infinite alternate;
+}
+.local-translate-progress:indeterminate::-moz-progress-bar { background: transparent; }
+@keyframes local-translate-wait { from { background-position: 0 0; } to { background-position: 100% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .local-translate-progress:indeterminate { animation: none; background-position: 50% 0; }
+}

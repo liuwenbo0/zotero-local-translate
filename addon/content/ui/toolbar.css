@@ -1,0 +1,8 @@
+#local-translate-toolbar {
+  list-style-image: url("chrome://localtranslate/content/ui/icons/translate.svg");
+  -moz-context-properties: fill;
+  fill: currentColor;
+}
+#local-translate-toolbar .toolbarbutton-icon { width: 18px; height: 18px; }
+#local-translate-toolbar[data-status="running"] { color: var(--color-accent, AccentColor); }
+#local-translate-toolbar[data-status="failed"] { color: var(--accent-red, #db2c3a); }

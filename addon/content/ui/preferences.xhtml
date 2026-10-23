@@ -1,0 +1,327 @@
+<h:section xmlns:h="http://www.w3.org/1999/xhtml" id="local-translate-settings">
+      <h:div class="settings-layout">
+        <h:nav role="tablist" aria-label="设置分类" aria-orientation="horizontal" class="settings-nav">
+          <h:button id="local-translate-settings-tab-general" type="button" role="tab" aria-controls="local-translate-settings-general" aria-selected="true" tabindex="0">常规</h:button>
+          <h:button id="local-translate-settings-tab-service" type="button" role="tab" aria-controls="local-translate-settings-service" aria-selected="false" tabindex="-1">翻译服务</h:button>
+          <h:button id="local-translate-settings-tab-quality" type="button" role="tab" aria-controls="local-translate-settings-quality" aria-selected="false" tabindex="-1">翻译质量</h:button>
+          <h:button id="local-translate-settings-tab-pdf" type="button" role="tab" aria-controls="local-translate-settings-pdf" aria-selected="false" tabindex="-1">PDF 排版</h:button>
+          <h:button id="local-translate-settings-tab-advanced" type="button" role="tab" aria-controls="local-translate-settings-advanced" aria-selected="false" tabindex="-1">高级</h:button>
+        </h:nav>
+        <h:form id="local-translate-settings-form" novalidate="novalidate">
+          <h:section id="local-translate-settings-general" role="tabpanel" aria-labelledby="local-translate-settings-tab-general">
+            <h:section class="settings-group">
+              <h:h3>翻译语言</h:h3>
+              <h:div class="form-row">
+                <h:label for="local-translate-langIn">源语言</h:label>
+                <h:div class="field">
+                  <h:select id="local-translate-langIn" value="en">
+                    <h:option value="en">英语</h:option>
+                    <h:option value="zh">简体中文</h:option>
+                    <h:option value="zh-TW">繁体中文</h:option>
+                    <h:option value="ja">日语</h:option>
+                    <h:option value="ko">韩语</h:option>
+                    <h:option value="de">德语</h:option>
+                    <h:option value="fr">法语</h:option>
+                    <h:option value="es">西班牙语</h:option>
+                  </h:select>
+                </h:div>
+              </h:div>
+              <h:div class="form-row">
+                <h:label for="local-translate-langOut">目标语言</h:label>
+                <h:div class="field">
+                  <h:select id="local-translate-langOut" value="zh">
+                    <h:option value="en">英语</h:option>
+                    <h:option value="zh">简体中文</h:option>
+                    <h:option value="zh-TW">繁体中文</h:option>
+                    <h:option value="ja">日语</h:option>
+                    <h:option value="ko">韩语</h:option>
+                    <h:option value="de">德语</h:option>
+                    <h:option value="fr">法语</h:option>
+                    <h:option value="es">西班牙语</h:option>
+                  </h:select>
+                </h:div>
+              </h:div>
+            </h:section>
+            <h:section class="settings-group">
+              <h:h3>文库与任务</h:h3>
+              <h:div class="check-row">
+                <h:label class="check">
+                  <h:input id="local-translate-askOnNew" type="checkbox"/>
+                  <h:span>新增 PDF 时询问是否翻译</h:span>
+                </h:label>
+              </h:div>
+              <h:div class="check-row">
+                <h:label class="check">
+                  <h:input id="local-translate-includeSubcollections" type="checkbox"/>
+                  <h:span>批量翻译包含子分类</h:span>
+                </h:label>
+              </h:div>
+              <h:div class="check-row">
+                <h:label class="check">
+                  <h:input id="local-translate-skipExisting" type="checkbox"/>
+                  <h:span>跳过已有译文的文献</h:span>
+                </h:label>
+                <h:p class="field-hint">有任意译文附件即跳过整条文献；关闭后可重新生成</h:p>
+              </h:div>
+            </h:section>
+          </h:section>
+          <h:section id="local-translate-settings-service" role="tabpanel" aria-labelledby="local-translate-settings-tab-service" hidden="hidden">
+            <h:p class="settings-description">填写自己的 OpenAI 兼容 API；引擎在首次使用时自动准备</h:p>
+            <h:section class="settings-group">
+              <h:h3>翻译 API</h:h3>
+              <h:div id="local-translate-custom-api">
+                <h:div class="form-row">
+                  <h:label for="local-translate-baseURL">Base URL</h:label>
+                  <h:div class="field">
+                    <h:input id="local-translate-baseURL" placeholder="https://api.deepseek.com/v1"/>
+                  </h:div>
+                </h:div>
+                <h:div class="form-row">
+                  <h:label for="local-translate-model">模型</h:label>
+                  <h:div class="field">
+                    <h:input id="local-translate-model" placeholder="deepseek-flash"/>
+                  </h:div>
+                </h:div>
+                <h:div class="form-row">
+                  <h:label for="local-translate-apiKey">API 密钥</h:label>
+                  <h:div class="field">
+                    <h:input id="local-translate-apiKey" type="password" autocomplete="off" placeholder="输入 API 密钥"/>
+                    </h:div>
+                </h:div>
+              </h:div>
+              <h:div class="form-row">
+                <h:label for="local-translate-thinking">思考模式</h:label>
+                <h:div class="field">
+                  <h:select id="local-translate-thinking">
+                    <h:option value="disabled">关闭</h:option>
+                    <h:option value="enabled">开启</h:option>
+                    <h:option value="default">使用 API 默认值</h:option>
+                  </h:select>
+                  <h:p class="field-hint">模型须支持所选参数；使用 API 默认值时不发送思考参数</h:p>
+                </h:div>
+              </h:div>
+              <h:div class="form-row">
+                <h:label for="local-translate-thinkingProtocol">参数协议</h:label>
+                <h:div class="field">
+                  <h:select id="local-translate-thinkingProtocol">
+                    <h:option value="auto">自动识别官方接口</h:option>
+                    <h:option value="thinking">thinking · DeepSeek / 兼容网关</h:option>
+                    <h:option value="enable_thinking">enable_thinking · Qwen / 兼容网关</h:option>
+                    <h:option value="reasoning_effort">reasoning_effort · OpenAI / 兼容网关</h:option>
+                  </h:select>
+                  <h:p class="field-hint">第三方接口可手动选择协议；reasoning_effort 关闭时发送 none，需模型支持</h:p>
+                </h:div>
+              </h:div>
+              <h:div class="form-row" id="local-translate-reasoning-effort-row">
+                <h:label for="local-translate-reasoningEffort">思考强度</h:label>
+                <h:div class="field"><h:select id="local-translate-reasoningEffort">
+                  <h:option value="low">低</h:option><h:option value="medium">中</h:option><h:option value="high">高</h:option>
+                </h:select></h:div>
+              </h:div>
+              <h:div class="inline-actions">
+                <h:button type="button" id="local-translate-test-api" aria-describedby="local-translate-test-api-hint">测试 API（少量用量）</h:button>
+                <h:p id="local-translate-test-api-hint" class="field-hint" hidden="hidden" aria-live="polite"/>
+              </h:div>
+            </h:section>
+            <h:section class="settings-group">
+              <h:h3>请求与速度</h:h3>
+              <h:div class="form-row">
+                <h:label for="local-translate-qps">每秒请求数</h:label>
+                <h:div class="field">
+                  <h:input id="local-translate-qps" type="number" min="1" max="100"/>
+                </h:div>
+              </h:div>
+              <h:div class="form-row">
+                <h:label for="local-translate-maxWorkers">并行线程</h:label>
+                <h:div class="field">
+                  <h:input id="local-translate-maxWorkers" type="number" min="0"/>
+                  <h:p class="field-hint">0 表示跟随每秒请求数</h:p>
+                </h:div>
+              </h:div>
+              <h:div class="form-row">
+                <h:label for="local-translate-timeout">超时（秒）</h:label>
+                <h:div class="field">
+                  <h:input id="local-translate-timeout" type="number" min="1"/>
+                </h:div>
+              </h:div>
+            </h:section>
+          </h:section>
+          <h:section id="local-translate-settings-quality" role="tabpanel" aria-labelledby="local-translate-settings-tab-quality" hidden="hidden">
+            <h:section class="settings-group">
+              <h:h3>术语与提示词</h:h3>
+              <h:div class="check-row">
+                <h:label class="check">
+                  <h:input id="local-translate-autoExtractGlossary" type="checkbox"/>
+                  <h:span>自动提取术语</h:span>
+                </h:label>
+                <h:p class="field-hint">提高同一文档内的术语一致性，会增加 API 用量</h:p>
+              </h:div>
+              <h:div class="form-row">
+                <h:label for="local-translate-customPrompt">系统提示词</h:label>
+                <h:div class="field">
+                  <h:textarea id="local-translate-customPrompt" rows="4" placeholder="例如：使用学术中文，保留专有名词和公式标记。"/>
+                  <h:p class="field-hint">设置翻译角色与写作要求；请保留公式和格式标记</h:p>
+                </h:div>
+              </h:div>
+            </h:section>
+            <h:section class="settings-group">
+              <h:h3>文本处理</h:h3>
+              <h:div class="form-row">
+                <h:label for="local-translate-fontFamily">译文字体</h:label>
+                <h:div class="field">
+                  <h:select id="local-translate-fontFamily">
+                    <h:option value="auto">自动匹配原文</h:option>
+                    <h:option value="serif">衬线字体</h:option>
+                    <h:option value="sans-serif">无衬线字体</h:option>
+                    <h:option value="script">手写 / 斜体</h:option>
+                  </h:select>
+                </h:div>
+              </h:div>
+              <h:div class="form-row">
+                <h:label for="local-translate-minTextLength">最短文本长度</h:label>
+                <h:div class="field">
+                  <h:input id="local-translate-minTextLength" type="number" min="0"/>
+                </h:div>
+              </h:div>
+              <h:div class="check-row">
+                <h:label class="check">
+                  <h:input id="local-translate-ignoreCache" type="checkbox"/>
+                  <h:span>忽略翻译缓存</h:span>
+                </h:label>
+                <h:p class="field-hint">强制重新请求 API；重新翻译已有附件时，还需关闭“跳过已有附件”</h:p>
+              </h:div>
+            </h:section>
+          </h:section>
+          <h:section id="local-translate-settings-pdf" role="tabpanel" aria-labelledby="local-translate-settings-tab-pdf" hidden="hidden">
+            <h:section class="settings-group">
+              <h:h3>输出样式</h:h3>
+              <h:div class="form-row">
+                <h:label for="local-translate-dualMode">双语布局</h:label>
+                <h:div class="field">
+                  <h:select id="local-translate-dualMode">
+                    <h:option value="side_by_side">原文与译文左右对照</h:option>
+                    <h:option value="alternating">原文与译文交替页</h:option>
+                  </h:select>
+                </h:div>
+              </h:div>
+              <h:div class="check-row">
+                <h:label class="check">
+                  <h:input id="local-translate-dualTranslateFirst" type="checkbox"/>
+                  <h:span>双语版本中译文在前</h:span>
+                </h:label>
+              </h:div>
+              <h:div class="form-row">
+                <h:label for="local-translate-watermark">水印</h:label>
+                <h:div class="field">
+                  <h:select id="local-translate-watermark">
+                    <h:option value="watermarked">保留引擎水印</h:option>
+                    <h:option value="no_watermark">不添加水印</h:option>
+                  </h:select>
+                </h:div>
+              </h:div>
+              <h:div class="check-row">
+                <h:label class="check">
+                  <h:input id="local-translate-preserveRichText" type="checkbox"/>
+                  <h:span>保留段落内的富文本样式</h:span>
+                </h:label>
+              </h:div>
+            </h:section>
+            <h:section class="settings-group">
+              <h:h3>兼容处理</h:h3>
+              <h:div class="form-row">
+                <h:label for="local-translate-ocrMode">扫描件兼容</h:label>
+                <h:div class="field">
+                  <h:select id="local-translate-ocrMode">
+                    <h:option value="off">关闭</h:option>
+                    <h:option value="auto">自动启用扫描件兼容</h:option>
+                    <h:option value="force">强制黑字白底</h:option>
+                  </h:select>
+                  <h:p class="field-hint">这是 OCR workaround，不能替代独立的图片文字识别</h:p>
+                </h:div>
+              </h:div>
+              <h:div class="check-row">
+                <h:label class="check">
+                  <h:input id="local-translate-enhanceCompatibility" type="checkbox"/>
+                  <h:span>增强 PDF 阅读器兼容性</h:span>
+                </h:label>
+                <h:p class="field-hint">启用后关闭富文本样式并跳过 PDF 清理</h:p>
+              </h:div>
+            </h:section>
+            <h:section class="settings-group">
+              <h:h3>分段与长文档</h:h3>
+              <h:div class="check-row">
+                <h:label class="check">
+                  <h:input id="local-translate-splitShortLines" type="checkbox"/>
+                  <h:span>将短行拆为独立段落</h:span>
+                </h:label>
+              </h:div>
+              <h:div class="form-row">
+                <h:label for="local-translate-shortLineSplitFactor">短行阈值</h:label>
+                <h:div class="field">
+                  <h:input id="local-translate-shortLineSplitFactor" type="number" min="0.1" max="1" step="0.01"/>
+                </h:div>
+              </h:div>
+              <h:div class="form-row">
+                <h:label for="local-translate-maxPagesPerPart">分块页数</h:label>
+                <h:div class="field">
+                  <h:input id="local-translate-maxPagesPerPart" type="number" min="0"/>
+                  <h:p class="field-hint">0 表示不分块；其他值须至少 50，完成后自动合并</h:p>
+                </h:div>
+              </h:div>
+            </h:section>
+          </h:section>
+          <h:section id="local-translate-settings-advanced" role="tabpanel" aria-labelledby="local-translate-settings-tab-advanced" hidden="hidden">
+            <h:section class="settings-group">
+              <h:h3>本地引擎</h:h3>
+              <h:div class="engine-info">
+                <h:p class="field-hint">安装在当前 Zotero 配置目录；首次准备需要联网和足够的磁盘空间；之后在本机处理 PDF</h:p>
+                <h:button type="button" id="local-translate-probe">检查 / 准备引擎</h:button>
+              </h:div>
+            </h:section>
+            <h:section class="settings-group">
+              <h:h3>公式与图表保护</h:h3>
+              <h:div class="form-row">
+                <h:label for="local-translate-formulaFontPattern">公式字体正则</h:label>
+                <h:div class="field">
+                  <h:input id="local-translate-formulaFontPattern" placeholder="留空使用引擎默认值"/>
+                  <h:p class="field-hint">Python 正则语法；留空使用引擎默认值</h:p>
+                </h:div>
+              </h:div>
+              <h:div class="form-row">
+                <h:label for="local-translate-formulaCharPattern">公式字符正则</h:label>
+                <h:div class="field">
+                  <h:input id="local-translate-formulaCharPattern" placeholder="留空使用引擎默认值"/>
+                </h:div>
+              </h:div>
+              <h:div class="form-row">
+                <h:label for="local-translate-figureTableProtectionThreshold">图表保护阈值</h:label>
+                <h:div class="field">
+                  <h:input id="local-translate-figureTableProtectionThreshold" type="number" min="0" max="1" step="0.01"/>
+                  <h:p class="field-hint">范围 0–1，默认 0.9</h:p>
+                </h:div>
+              </h:div>
+            </h:section>
+            <h:section class="settings-group">
+              <h:h3>扫描检测</h:h3>
+              <h:div class="check-row">
+                <h:label class="check">
+                  <h:input id="local-translate-skipScannedDetection" type="checkbox"/>
+                  <h:span>跳过扫描页检测</h:span>
+                </h:label>
+                <h:p class="field-hint">可能降低质量；扫描件自动兼容模式开启时，此项不可用</h:p>
+              </h:div>
+            </h:section>
+          </h:section>
+        </h:form>
+      </h:div>
+      <h:div class="settings-actions">
+        <h:div id="local-translate-engine-state" hidden="hidden">
+          <h:div class="engine-caption"><h:span id="local-translate-engine-status" role="status" aria-live="polite"/><h:span id="local-translate-engine-percent"/></h:div>
+          <h:progress id="local-translate-engine-progress" class="local-translate-progress" max="100" aria-label="准备本地引擎" hidden="hidden"/>
+        </h:div>
+        <h:div class="save-row">
+        <h:span id="local-translate-settings-notice" class="secondary" role="status">设置在下一项任务开始时生效</h:span>
+        <h:button type="submit" form="local-translate-settings-form" class="primary">保存配置</h:button>
+        </h:div>
+      </h:div>
+    </h:section>

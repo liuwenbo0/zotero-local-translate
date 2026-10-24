@@ -6,6 +6,8 @@ import multiprocessing
 import os
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -65,6 +67,24 @@ def _check_spawned_rpm_settings(settings, results_queue):
     )
 
 
+def _cache_paths():
+    from babeldoc import const
+    from babeldoc.translator import cache as babeldoc_cache
+    from pdf2zh_next.translator import cache
+
+    return {
+        "assets": str(const.CACHE_FOLDER),
+        "resource": str(const.get_cache_file_path("model.onnx", "models")),
+        "tiktoken": os.environ["TIKTOKEN_CACHE_DIR"],
+        "babeldoc_db": str(babeldoc_cache.db.database),
+        "pdf2zh_db": str(cache.db.database),
+    }
+
+
+def _check_spawned_cache_paths(results_queue):
+    results_queue.put(_cache_paths())
+
+
 class WorkerTests(unittest.TestCase):
     def payload(self, **options):
         cfg = {
@@ -77,6 +97,41 @@ class WorkerTests(unittest.TestCase):
         }
         cfg.update(options)
         return {"config": cfg, "apiKey": "example-private-key"}
+
+    def test_cache_paths_are_shared_by_parent_and_real_spawned_child(self):
+        with tempfile.TemporaryDirectory() as folder:
+            script = """
+import json, multiprocessing
+from test_worker import _cache_paths, _check_spawned_cache_paths
+if __name__ == '__main__':
+    context = multiprocessing.get_context('spawn')
+    results = context.Queue()
+    process = context.Process(target=_check_spawned_cache_paths, args=(results,))
+    process.start()
+    child = results.get(timeout=20)
+    process.join(timeout=20)
+    assert process.exitcode == 0
+    print(json.dumps({'parent': _cache_paths(), 'child': child}))
+"""
+            result = subprocess.run(
+                [sys.executable, "-c", script],
+                cwd=Path(__file__).parent,
+                env={**os.environ, "LOCAL_TRANSLATE_ASSETS_ROOT": folder},
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=45,
+            )
+            paths = json.loads(result.stdout)
+            expected = {
+                "assets": folder,
+                "resource": str(Path(folder) / "models/model.onnx"),
+                "tiktoken": str(Path(folder) / "tiktoken"),
+                "babeldoc_db": str(Path(folder) / "cache.v1.db"),
+                "pdf2zh_db": str(Path(folder) / "pdf2zh_next/cache.v1.db"),
+            }
+            self.assertEqual(paths["parent"], expected)
+            self.assertEqual(paths["child"], expected)
 
     def test_generated_pdf_is_skipped_before_api_configuration_or_asset_download(self):
         import pymupdf
@@ -125,6 +180,73 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(
             worker.clean("failed: example-private-key"), "failed: [redacted]"
         )
+
+    def test_preview_serializes_real_engine_templates_without_any_network_transport(
+        self,
+    ):
+        import httpx
+
+        for base_url, extra in [
+            ("https://api.deepseek.com/v1", {"thinking": {"type": "disabled"}}),
+            ("https://api.openai.com/v1", {"reasoning_effort": "none"}),
+            (
+                "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+                {"enable_thinking": False},
+            ),
+        ]:
+            with self.subTest(base_url=base_url):
+                settings = worker.build_settings(
+                    self.payload(
+                        baseURL=base_url,
+                        thinking="disabled",
+                        customPrompt="Use academic terms",
+                    )
+                )
+                with patch.object(
+                    httpx.HTTPTransport,
+                    "handle_request",
+                    side_effect=AssertionError("preview must stay offline"),
+                ):
+                    requests = worker.preview_requests(settings)
+                self.assertEqual(len(requests), 5)
+                self.assertNotIn("example-private-key", json.dumps(requests))
+                for entry in requests:
+                    request = entry["request"]
+                    self.assertEqual(request["url"], base_url + "/chat/completions")
+                    self.assertEqual(request["method"], "POST")
+                    self.assertEqual(
+                        request["headers"]["authorization"], "Bearer [redacted]"
+                    )
+                    self.assertEqual(request["body"]["model"], "test-model")
+                    for key, value in extra.items():
+                        self.assertEqual(request["body"][key], value)
+                body = requests[0]["request"]["body"]
+                self.assertNotIn("temperature", body)
+                self.assertNotIn("max_tokens", body)
+                self.assertEqual(body["messages"][0]["role"], "user")
+                self.assertIn(
+                    "Use academic terms\nFollow all rules strictly.",
+                    body["messages"][0]["content"],
+                )
+                self.assertIn('"layout_label": "text"', body["messages"][0]["content"])
+                self.assertEqual(requests[-1]["request"]["body"]["max_tokens"], 128)
+
+    def test_anonymous_preview_omits_auth_and_respects_glossary_setting(self):
+        payload = self.payload(
+            baseURL="https://index-translate.bilibili.com/v1", autoExtractGlossary=False
+        )
+        payload["apiKey"] = ""
+        requests = worker.preview_requests(worker.build_settings(payload))
+        self.assertEqual(len(requests), 4)
+        for entry in requests:
+            self.assertNotIn("authorization", entry["request"]["headers"])
+            self.assertFalse(
+                any(
+                    name.startswith("x-stainless-")
+                    for name in entry["request"]["headers"]
+                )
+            )
+            self.assertNotIn("thinking", entry["request"]["body"])
 
     def test_pdf_validation_checks_page_counts(self):
         import pymupdf

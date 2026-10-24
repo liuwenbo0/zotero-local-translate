@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import signal
 import sys
+from types import SimpleNamespace
 from urllib.parse import urlsplit
 
 PROTOCOL = sys.stdout
@@ -44,6 +45,31 @@ def remember_secrets(data):
             and any(s in field.lower() for s in ("key", "secret", "token", "password"))
         ):
             SECRETS.append(value)
+
+
+def install_cache_paths():
+    # Spawned interpreters inherit this before importing any engine modules.
+    root = os.environ.get("LOCAL_TRANSLATE_ASSETS_ROOT")
+    if not root:
+        return
+    import babeldoc.const as const
+
+    const.CACHE_FOLDER = Path(root)
+    const.TIKTOKEN_CACHE_FOLDER = const.CACHE_FOLDER / "tiktoken"
+    const.TIKTOKEN_CACHE_FOLDER.mkdir(parents=True, exist_ok=True)
+    os.environ["TIKTOKEN_CACHE_DIR"] = str(const.TIKTOKEN_CACHE_FOLDER)
+
+    # PDFMathTranslate has a separate SQLite cache with a hardcoded home path.
+    from pdf2zh_next.translator import cache
+
+    folder = const.CACHE_FOLDER / "pdf2zh_next"
+    folder.mkdir(parents=True, exist_ok=True)
+    cache.db.close()
+    cache.db.init(
+        str(folder / "cache.v1.db"),
+        pragmas={"journal_mode": "wal", "busy_timeout": 1000},
+    )
+    cache.db.create_tables([cache._TranslationCache], safe=True)
 
 
 def install_openai_compatibility():
@@ -105,6 +131,7 @@ def install_rpm_compatibility():
     SettingsModel.validate_settings = validate_fractional_qps
 
 
+install_cache_paths()
 install_openai_compatibility()
 install_rpm_compatibility()
 
@@ -258,6 +285,123 @@ def build_settings(payload):
     return settings
 
 
+def api_test_request(settings):
+    engine = settings.translate_engine_settings
+    request = {
+        "model": engine.openai_model,
+        "messages": [{"role": "user", "content": "Reply only: OK"}],
+        "max_tokens": 128,
+    }
+    if engine._openai_extra_body:
+        request["extra_body"] = engine._openai_extra_body
+    return request
+
+
+def preview_requests(settings):
+    """Serialize real engine calls locally; the transport cannot access the network."""
+    import httpx
+    from openai import OpenAI
+    from babeldoc.format.pdf.document_il.midend.il_translator import ILTranslator
+    from babeldoc.format.pdf.document_il.midend.il_translator_llm_only import (
+        ILTranslatorLLMOnly,
+    )
+    from babeldoc.format.pdf.document_il.midend.automatic_term_extractor import (
+        LLM_PROMPT_TEMPLATE,
+    )
+    from pdf2zh_next.translator.base_rate_limiter import BaseRateLimiter
+    from pdf2zh_next.translator.translator_impl.openai import OpenAITranslator
+
+    requests = []
+    label = ""
+
+    def capture(request):
+        headers = dict(request.headers)
+        if "authorization" in headers:
+            headers["authorization"] = "Bearer [redacted]"
+        requests.append(
+            {
+                "label": label,
+                "request": {
+                    "method": request.method,
+                    "url": str(request.url),
+                    "body": json.loads(request.content),
+                    "headers": headers,
+                },
+            }
+        )
+        return httpx.Response(
+            200,
+            json={
+                "id": "local-preview",
+                "object": "chat.completion",
+                "created": 0,
+                "model": settings.translate_engine_settings.openai_model,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "[]"},
+                        "finish_reason": "stop",
+                    }
+                ],
+            },
+        )
+
+    engine = settings.translate_engine_settings
+    with OpenAI(
+        base_url=engine.openai_base_url,
+        api_key=engine.openai_api_key,
+        timeout=float(engine.openai_timeout),
+        max_retries=0,
+        http_client=httpx.Client(transport=httpx.MockTransport(capture)),
+    ) as client:
+        translator = OpenAITranslator(settings, BaseRateLimiter())
+        translator.client.close()
+        translator.client = client
+        sample = "This study evaluates the accuracy of a neural network on scientific documents."
+        config = SimpleNamespace(
+            lang_out=settings.translation.lang_out,
+            custom_system_prompt=settings.translation.custom_system_prompt,
+        )
+        # The prompt builders need no PDF, tokenizer, layout model, or downloaded fonts.
+        batch = ILTranslatorLLMOnly.__new__(ILTranslatorLLMOnly)
+        batch.translation_config = config
+        batch._cached_glossaries = []
+        prompt = batch._build_llm_prompt(
+            json.dumps(
+                [{"id": 0, "input": sample, "layout_label": "text"}],
+                ensure_ascii=False,
+                indent=2,
+            ),
+            None,
+            None,
+            sample,
+        )
+        label = "正文翻译（示例段落）"
+        translator.do_llm_translate(prompt, {"request_json_mode": True})
+
+        paragraph = ILTranslator.__new__(ILTranslator)
+        paragraph.translation_config = config
+        paragraph._cached_glossaries = []
+        label = "单段翻译（回退请求）"
+        translator.do_llm_translate(paragraph.generate_prompt_for_llm(sample))
+
+        if not settings.translation.no_auto_extract_glossary:
+            label = "自动术语提取（示例段落）"
+            prompt = LLM_PROMPT_TEMPLATE.format(
+                target_language=config.lang_out,
+                text_to_process=sample,
+                reference_glossary_section="",
+                example_output='[\n  {"src": "LLM", "tgt": "大语言模型"},\n  {"src": "GPT", "tgt": "GPT"}\n]',
+            )
+            translator.do_llm_translate(prompt, {"request_json_mode": True})
+
+        label = "引擎连接检查"
+        translator.do_translate("Hello")
+        label = "设置中的 API 测试"
+        client.chat.completions.create(**api_test_request(settings))
+    return requests
+
+
 def cache_identity(settings, source_digest):
     from pdf2zh_next.const import __version__
 
@@ -393,13 +537,10 @@ async def run(payload):
                 emit("result", skipped=True, reason="already_translated")
                 return
     cfg = payload["config"]
-    if cfg.get("assetsRoot"):
-        import babeldoc.const as const
-
-        const.CACHE_FOLDER = Path(cfg["assetsRoot"])
-        const.TIKTOKEN_CACHE_FOLDER = const.CACHE_FOLDER / "tiktoken"
-        const.TIKTOKEN_CACHE_FOLDER.mkdir(parents=True, exist_ok=True)
-        os.environ["TIKTOKEN_CACHE_DIR"] = str(const.TIKTOKEN_CACHE_FOLDER)
+    if cfg.get("assetsRoot") and cfg["assetsRoot"] != os.environ.get(
+        "LOCAL_TRANSLATE_ASSETS_ROOT"
+    ):
+        raise ValueError("缓存目录必须在引擎进程启动前配置")
     if action == "probe":
         from pdf2zh_next.const import __version__
         import pymupdf  # noqa: F401
@@ -420,7 +561,9 @@ async def run(payload):
         )
         return
     settings = build_settings(payload)
-    if action == "test_api":
+    if action == "preview":
+        emit("result", requests=await asyncio.to_thread(preview_requests, settings))
+    elif action == "test_api":
         from openai import OpenAI
 
         engine = settings.translate_engine_settings
@@ -432,15 +575,9 @@ async def run(payload):
             timeout=float(engine.openai_timeout),
             max_retries=0,
         ) as client:
-            options = {}
-            if getattr(engine, "_openai_extra_body", None):
-                options["extra_body"] = engine._openai_extra_body
             response = await asyncio.to_thread(
                 client.chat.completions.create,
-                model=engine.openai_model,
-                messages=[{"role": "user", "content": "Reply only: OK"}],
-                max_tokens=128,
-                **options,
+                **api_test_request(settings),
             )
         emit("result", message=response.choices[0].message.content or "API connected")
     elif action == "translate":

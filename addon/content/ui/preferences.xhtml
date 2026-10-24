@@ -45,6 +45,7 @@
             </h:section>
             <h:section class="settings-group">
               <h:h3>文库与任务</h:h3>
+              <h:p class="field-hint">仅处理期刊论文、会议论文、预印本和学位论文下的本地 PDF。条目语言与目标语言相同时跳过；语言未填写时仍会翻译。</h:p>
               <h:div class="check-row">
                 <h:label class="check">
                   <h:input id="local-translate-askOnNew" type="checkbox"/>
@@ -87,7 +88,8 @@
                     <h:div class="form-row">
                       <h:label for="local-translate-apiKey">API 密钥</h:label>
                       <h:div class="field">
-                        <h:input id="local-translate-apiKey" type="password" autocomplete="off" placeholder="输入 API 密钥"/>
+                        <h:input id="local-translate-apiKey" type="password" autocomplete="off" placeholder="留空使用匿名接口"/>
+                        <h:p class="field-hint">留空保存会清除已存密钥，使用匿名接口。</h:p>
                       </h:div>
                     </h:div>
                   </h:div>
@@ -130,8 +132,10 @@
                     <h:h3>API 请求预览</h:h3>
                     <h:button type="button" id="local-translate-copy-request" title="复制到剪贴板">复制</h:button>
                   </h:div>
-                  <h:pre id="local-translate-request-preview" contenteditable="true" spellcheck="false"><h:code></h:code></h:pre>
-                  <h:button type="button" id="local-translate-apply-preview">应用修改</h:button>
+                  <h:select id="local-translate-request-kind" aria-label="请求类型" disabled="disabled"/>
+                  <h:p class="field-hint">由实际引擎在本地生成，不发送到 API。正文为示例；标题、术语和段落内容会随 PDF 改变。密钥已隐藏。</h:p>
+                  <h:pre id="local-translate-request-preview" tabindex="0" aria-label="实际请求预览"/>
+                  <h:button type="button" id="local-translate-refresh-preview">生成预览</h:button>
                 </h:div>
               </h:div>
             </h:section>

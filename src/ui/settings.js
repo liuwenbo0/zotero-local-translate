@@ -16,6 +16,8 @@ var SettingsView = {
     root.closest(".pane-container").classList.add("local-translate-preferences");
     this.plugin = Zotero.LocalTranslate;
     this.plugin.preferences.add(this);
+    this.keyLoading = true;
+    this.$("apiKey").disabled = true;
     void this.plugin.loadPreferenceKey(this);
     const settings = this.plugin.settings;
     for (const id of this.fields) this.$(id).value = settings[id];
@@ -77,9 +79,11 @@ var SettingsView = {
     this.$("engine-percent").textContent = known ? Math.round(state.progress) + "%" : "";
     const translating = !!this.plugin.running;
     const engineBusy = !!this.plugin.workerTask || !!state?.busy;
-    const busy = translating || engineBusy;
+    const busy = translating || engineBusy || this.keyLoading || this.keyLoadError;
+    this.root.querySelector('[type="submit"]').disabled = !!(this.keyLoading || this.keyLoadError);
     this.$("probe").disabled = busy;
     this.$("test-api").disabled = busy;
+    this.$("refresh-preview").disabled = !!(busy || this.previewBusy);
     const hint = this.$("test-api-hint");
     const reason = translating ? "翻译任务正在进行，测试 API 暂不可用。请等待任务结束。" :
       state?.busy ? (state.stage || "本地引擎正在工作，测试 API 暂不可用。") :
@@ -130,62 +134,50 @@ var SettingsView = {
     return settings;
   },
 
-  save() { return this.plugin.savePreferences(this.values(), this.$("apiKey").value.trim() || undefined); },
+  save() {
+    if (this.keyLoading || this.keyLoadError) return;
+    return this.plugin.savePreferences(this.values(), this.$("apiKey").value.trim());
+  },
 
   testEngine(action) {
-    if (this.plugin.running || this.plugin.workerTask || this.plugin.engineStatus?.busy) {
+    if (this.keyLoading || this.keyLoadError || this.plugin.running || this.plugin.workerTask || this.plugin.engineStatus?.busy) {
       this.renderEngine();
       return;
     }
     this.message("");
     const settings = action === "probe" ? undefined : this.values();
-    const key = action === "probe" ? undefined : this.$("apiKey").value.trim() || undefined;
+    const key = action === "probe" ? undefined : this.$("apiKey").value.trim();
     // No long-lived promise callbacks in a preference sandbox that Zotero may destroy.
     this.plugin.checkEngine(action, settings, key);
   },
 
   setupPreviewPanel() {
-    const updatePreview = () => {
-      const settings = this.values();
-      const request = {
-        model: settings.model,
-        messages: [
-          { role: "system", content: settings.customPrompt || "You are a professional translator." },
-          { role: "user", content: `Translate the following ${settings.langIn} text to ${settings.langOut}:\n\n[Sample text here]` }
-        ],
-        temperature: 0.3,
-        max_tokens: 2000
-      };
-
-      if (settings.thinking !== "default") {
-        if (settings.thinkingProtocol === "thinking") {
-          request.thinking = { type: settings.thinking };
-        } else if (settings.thinkingProtocol === "enable_thinking") {
-          request.enable_thinking = settings.thinking === "enabled";
-        } else if (settings.thinkingProtocol === "reasoning_effort") {
-          request.reasoning_effort = settings.thinking === "enabled" ? settings.reasoningEffort : "none";
-        }
-      }
-
-      const preview = this.$("request-preview");
-      preview.querySelector("code").textContent = JSON.stringify(request, null, 2);
+    this.previewRevision = 0;
+    const invalidate = () => {
+      this.previewRevision++;
+      this.previewRequests = null;
+      this.$("request-preview").textContent = "配置已更改，请重新生成预览。";
+      this.$("request-kind").disabled = true;
+      this.$("copy-request").disabled = true;
     };
-
-    // Update preview on any field change
-    for (const id of this.fields) {
-      const el = this.$(id);
-      if (el) {
-        el.addEventListener("input", updatePreview);
-        el.addEventListener("change", updatePreview);
-      }
+    for (const id of [...this.fields, "apiKey"]) {
+      this.$(id).addEventListener("input", invalidate);
+      this.$(id).addEventListener("change", invalidate);
     }
-    for (const id of this.checks) {
-      const el = this.$(id);
-      if (el) el.addEventListener("change", updatePreview);
-    }
-
-    // Copy button
+    for (const id of this.checks) this.$(id).addEventListener("change", invalidate);
+    this.$("refresh-preview").onclick = () => {
+      if (this.$("refresh-preview").disabled) return;
+      this.previewBusy = true;
+      this.previewRequests = null;
+      this.$("request-preview").textContent = "正在生成实际请求…";
+      this.$("copy-request").disabled = true;
+      this.$("request-kind").disabled = true;
+      this.renderEngine();
+      this.plugin.previewRequest(this, this.values(), this.$("apiKey").value.trim());
+    };
+    this.$("request-kind").onchange = () => this.showRequestPreview();
     this.$("copy-request").onclick = () => {
+      if (!this.previewRequests) return;
       const text = this.$("request-preview").textContent;
       navigator.clipboard.writeText(text).then(() => {
         this.message("已复制到剪贴板");
@@ -193,36 +185,34 @@ var SettingsView = {
         this.message("复制失败", true);
       });
     };
+    invalidate();
+    this.$("request-preview").textContent = "点击“生成预览”查看引擎实际生成的示例请求。";
+  },
 
-    // Apply edited preview back to form
-    this.$("apply-preview").onclick = () => {
-      try {
-        const edited = JSON.parse(this.$("request-preview").textContent);
-        if (edited.model) this.$("model").value = edited.model;
-        if (edited.messages?.[0]?.content) this.$("customPrompt").value = edited.messages[0].content;
-        if (edited.thinking) {
-          this.$("thinkingProtocol").value = "thinking";
-          this.$("thinking").value = edited.thinking.type || "enabled";
-        } else if (edited.enable_thinking !== undefined) {
-          this.$("thinkingProtocol").value = "enable_thinking";
-          this.$("thinking").value = edited.enable_thinking ? "enabled" : "disabled";
-        } else if (edited.reasoning_effort) {
-          this.$("thinkingProtocol").value = "reasoning_effort";
-          if (edited.reasoning_effort !== "none") {
-            this.$("thinking").value = "enabled";
-            this.$("reasoningEffort").value = edited.reasoning_effort;
-          } else {
-            this.$("thinking").value = "disabled";
-          }
+  finishRequestPreview(requests, revision, error) {
+    this.previewBusy = false;
+    if (revision === this.previewRevision) {
+      if (error) {
+        this.$("request-preview").textContent = "无法生成预览：" + error;
+      } else {
+        this.previewRequests = requests;
+        const select = this.$("request-kind");
+        select.replaceChildren();
+        for (const [index, entry] of requests.entries()) {
+          const option = this.root.ownerDocument.createElementNS("http://www.w3.org/1999/xhtml", "option");
+          option.value = String(index); option.textContent = entry.label;
+          select.append(option);
         }
-        updatePreview();
-        this.message("已应用预览中的修改");
-      } catch (error) {
-        this.message("JSON 格式错误：" + error.message, true);
+        select.value = "0"; select.disabled = false;
+        this.showRequestPreview();
       }
-    };
+    }
+    this.renderEngine();
+  },
 
-    // Initial render
-    updatePreview();
+  showRequestPreview() {
+    const request = this.previewRequests?.[Number(this.$("request-kind").value)]?.request;
+    this.$("request-preview").textContent = request ? JSON.stringify(request, null, 2) : "没有可预览的请求";
+    this.$("copy-request").disabled = !request;
   },
 };

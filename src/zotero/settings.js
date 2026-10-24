@@ -26,14 +26,33 @@ Object.defineProperties(LocalTranslate, Object.getOwnPropertyDescriptors({
     return logins[0]?.password || "";
   },
 
+  captureConfiguration(includeKey = true) {
+    // Read settings and credentials in the same serialized operation as saves.
+    const task = (this.settingsTask || Promise.resolve()).catch(() => {}).then(async () => {
+      const config = this.settings;
+      const apiKey = includeKey ? await this.getKey() : "";
+      return { config, apiKey };
+    });
+    this.settingsTask = task;
+    return task;
+  },
+
   async loadPreferenceKey(view) {
     try {
       const key = await this.getKey();
       if (this.preferences.has(view) && view.root.isConnected && !view.$("apiKey").value) view.$("apiKey").value = key;
     } catch (error) {
       if (this.preferences.has(view)) {
-        try { view.message("无法读取 API 密钥：" + this.safeError(error), true); }
+        try { view.keyLoadError = true; view.message("无法读取 API 密钥：" + this.safeError(error), true); }
         catch { this.preferences.delete(view); }
+      }
+    } finally {
+      if (this.preferences.has(view)) {
+        try {
+          view.keyLoading = false;
+          view.$("apiKey").disabled = false;
+          view.renderEngine();
+        } catch { this.preferences.delete(view); }
       }
     }
   },
@@ -47,8 +66,7 @@ Object.defineProperties(LocalTranslate, Object.getOwnPropertyDescriptors({
     }
   },
 
-  async saveSettings(settings, key) {
-    // The caller's preference sandbox may disappear while the login manager is saving.
+  normalizeSettings(settings) {
     settings = JSON.parse(JSON.stringify(settings));
     if (!Number.isInteger(settings.rpm) || settings.rpm < 1 || settings.rpm > 6000) throw new Error("RPM 应为 1–6000 的整数");
     if (!Number.isInteger(settings.timeout) || settings.timeout < 1) throw new Error("超时时间必须为正整数");
@@ -70,16 +88,27 @@ Object.defineProperties(LocalTranslate, Object.getOwnPropertyDescriptors({
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error("API 地址须为 HTTP(S) base URL");
     if (!settings.model.trim()) throw new Error("请填写模型");
     settings.baseURL = settings.baseURL.trim().replace(/\/chat\/completions\/?$/, "").replace(/\/$/, "");
-    if (key !== undefined) {
-      const old = Services.logins.findLogins("chrome://localtranslate", null, "API key");
-      if (key) {
-        const login = Cc["@mozilla.org/login-manager/loginInfo;1"].createInstance(Ci.nsILoginInfo);
-        login.init("chrome://localtranslate", null, "API key", "api", key, "", "");
-        if (old.length) Services.logins.modifyLogin(old[0], login);
-        else await Services.logins.addLoginAsync(login);
-      } else for (const login of old) Services.logins.removeLogin(login);
-    }
-    Zotero.Prefs.set("extensions.localpdftranslate.settings", JSON.stringify(settings), true);
-    this.changed();
+    return settings;
+  },
+
+  saveSettings(settings, key) {
+    // The caller's preference sandbox may disappear while the login manager is saving.
+    settings = JSON.parse(JSON.stringify(settings));
+    const task = (this.settingsTask || Promise.resolve()).catch(() => {}).then(async () => {
+      settings = this.normalizeSettings(settings);
+      if (key !== undefined) {
+        const old = Services.logins.findLogins("chrome://localtranslate", null, "API key");
+        if (key) {
+          const login = Cc["@mozilla.org/login-manager/loginInfo;1"].createInstance(Ci.nsILoginInfo);
+          login.init("chrome://localtranslate", null, "API key", "api", key, "", "");
+          if (old.length) Services.logins.modifyLogin(old[0], login);
+          else await Services.logins.addLoginAsync(login);
+        } else for (const login of old) Services.logins.removeLogin(login);
+      }
+      Zotero.Prefs.set("extensions.localpdftranslate.settings", JSON.stringify(settings), true);
+      this.changed();
+    });
+    this.settingsTask = task;
+    return task;
   },
 }));

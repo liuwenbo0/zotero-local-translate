@@ -339,7 +339,8 @@
   font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
   font-size: 0.85em;
   line-height: 1.45;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   background: var(--color-background, Canvas);
   color: var(--fill-primary, CanvasText);
   border: 0;
@@ -347,17 +348,12 @@
   max-height: min(65vh, 520px);
 }
 
-#local-translate-settings #local-translate-request-preview code {
-  font: inherit;
-  color: inherit;
-}
-
 #local-translate-settings #local-translate-request-preview:focus {
   outline: 2px solid var(--accent-blue, Highlight);
   outline-offset: 1px;
 }
 
-#local-translate-settings #local-translate-apply-preview {
+#local-translate-settings #local-translate-refresh-preview {
   margin: 6px 0 0;
   align-self: flex-end;
 }

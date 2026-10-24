@@ -32,15 +32,15 @@ function fixture() {
     Notifier: { unregisterObserver() {} }, MenuManager: { unregisterMenu() {} },
   };
   function attachment(id, key, parent, filename = 'paper.pdf', tags = []) {
-    return { id, key, libraryID: 1, parentItemID: parent, attachmentFilename: filename,
+    return { id, key, libraryID: 1, parentItemID: parent, attachmentFilename: filename, itemType: 'attachment',
       isPDFAttachment: () => true, isRegularItem: () => false, getTags: () => tags.map(tag => ({ tag })),
       fileExists: async () => true, getFilePathAsync: async () => '/pdf/' + filename,
       getField: () => filename, addTag: tag => { if (!tags.includes(tag)) tags.push(tag); }, save: async () => {}, saveTx: async () => {},
     };
   }
-  function parent(id = 1, children = []) {
-    return { id, key: 'PARENT01', libraryID: 1, children, isPDFAttachment: () => false,
-      isRegularItem: () => true, getAttachments: () => children, getField: () => 'Test paper' };
+  function parent(id = 1, children = [], itemType = 'journalArticle', language = 'en') {
+    return { id, key: 'PARENT01', libraryID: 1, children, itemType, isPDFAttachment: () => false,
+      isRegularItem: () => true, getAttachments: () => children, getField: field => field === 'language' ? language : 'Test paper' };
   }
   const context = vm.createContext({ Zotero: zotero, Services: services,
     PathUtils: { join: (...p) => p.join('/') }, Ci: {}, IOUtils: { exists: async () => true, stat: async()=>({size:100,lastModified:1}) },
@@ -52,6 +52,19 @@ function fixture() {
   plugin.persist = async () => {};
   plugin.openWindow = () => {};
   return { plugin, items, parent, attachment, settings, zotero, context, prompts: () => prompts };
+}
+
+function captureWorkerRequests(f, result = {outputs:{}}) {
+  const requests = [];
+  f.context.ChromeUtils = {importESModule: () => ({Subprocess: {call: async () => {
+    let read = false;
+    return {
+      stdin: {write: async text => requests.push(JSON.parse(text)), close: async () => {}},
+      stdout: {readString: async () => read ? '' : (read = true, JSON.stringify({type:'result',...result})+'\n')},
+      stderr: {readString: async () => ''}, wait: async () => ({exitCode: 0}), kill() {},
+    };
+  }}})};
+  return requests;
 }
 
 test('task list pins active work above FIFO queued jobs and newest history', () => {
@@ -113,6 +126,7 @@ test('saved QPS limits migrate to RPM while explicit RPM takes precedence', () =
 
 test('retrying an earlier failed job while another runs is picked up by the same queue', async () => {
   const f = fixture(); f.context.IOUtils.makeDirectory = async () => {}; f.plugin.dir = '/jobs';
+  f.items.set(1, f.parent(1, [2, 3]));
   f.items.set(2, f.attachment(2, 'SOURCE01', 1, 'first.pdf'));
   f.items.set(3, f.attachment(3, 'SOURCE02', 1, 'later.pdf'));
   f.plugin.jobs = [{id:'first',sourceID:2,sourceKey:'SOURCE01',language:'zh',status:'failed'},
@@ -131,6 +145,7 @@ test('retrying an earlier failed job while another runs is picked up by the same
 
 test('shutdown waits for a running worker and preserves it as interrupted', async () => {
   const f = fixture(); f.context.IOUtils.makeDirectory = async () => {}; f.plugin.dir = '/jobs';
+  f.items.set(1, f.parent(1, [2]));
   f.items.set(2, f.attachment(2, 'SOURCE01', 1));
   f.plugin.jobs = [{id:'active',sourceID:2,sourceKey:'SOURCE01',language:'zh',status:'queued'}];
   let started, stop;
@@ -165,10 +180,12 @@ test('removing a task record preserves Zotero attachments and refuses an active 
 });
 
 test('a worker reserves its slot before asynchronous prerequisites and releases it after failure', async () => {
-  const f = fixture(); let release, checks = 0;
-  f.context.IOUtils.exists = () => { checks++; return new Promise(resolve => { release = resolve; }); };
+  const f = fixture(); let release, checks = 0, entered;
+  const started = new Promise(resolve => {entered = resolve;});
+  f.context.IOUtils.exists = () => { checks++; entered(); return new Promise(resolve => { release = resolve; }); };
   const first = f.plugin.runWorker({action:'probe'});
   await assert.rejects(f.plugin.runWorker({action:'probe'}), /正在运行/);
+  await started;
   assert.equal(checks, 1);
   release(false); await assert.rejects(first, /找不到 Python/);
   assert.equal(f.plugin.workerTask, null);
@@ -215,6 +232,51 @@ test('source selection deduplicates parent and attachment, skips unavailable and
   assert.equal((await f.plugin.sourcesFor([p])).length, 0);
 });
 
+test('paper screening applies to parents, directly selected attachments and standalone PDFs', async () => {
+  const f = fixture();
+  for (const [i, type] of ['journalArticle','conferencePaper','preprint','thesis','report','book','webpage','document'].entries()) {
+    const id=10+i*2, p=f.parent(id,[id+1],type), pdf=f.attachment(id+1,'SOURCE'+id,id);
+    f.items.set(id,p); f.items.set(id+1,pdf);
+    const expected=i<4 ? 1 : 0;
+    assert.equal((await f.plugin.sourcesFor([p])).length,expected,type);
+    assert.equal((await f.plugin.sourcesFor([pdf])).length,expected,'direct '+type);
+  }
+  assert.equal((await f.plugin.sourcesFor([f.attachment(99,'LONEPDF',null)])).length,0);
+  const html=f.attachment(100,'HTMLFILE',10,'paper.html'); html.isPDFAttachment=()=>false;
+  f.items.set(100,html); f.items.get(10).children.push(100);
+  assert.equal((await f.plugin.sourcesFor([html])).length,0);
+  assert.equal((await f.plugin.sourcesFor([f.items.get(10)])).length,1);
+  f.items.get(10).deleted=true;
+  assert.equal((await f.plugin.sourcesFor([f.items.get(11)])).length,0);
+});
+
+test('target-language screening matches aliases and regions without guessing unknown or mixed languages', async () => {
+  const f=fixture(), pdf=f.attachment(2,'SOURCE01',1); f.items.set(2,pdf);
+  for (const [language,target,skip] of [
+    ['zh','zh',true],['Chinese','zh-CN',true],['中文','zh',true],['zh_CN','zh-Hans',true],
+    ['eng','en-US',true],['English','en',true],['en-GB','en-US',true],['日本語','ja',true],
+    ['zh-TW','zh-CN',false],['zh-TW','zh',false],['zh','zh-TW',false],['zh-CN','zh-TW',false],['en','zh',false],['','zh',false],['en; zh','zh',false],
+  ]) {
+    f.items.set(1,f.parent(1,[2],'journalArticle',language));
+    f.settings.set('extensions.localpdftranslate.settings',JSON.stringify({langOut:target}));
+    assert.equal((await f.plugin.candidatesFor([pdf])).candidates.length,skip ? 0 : 1,language+' → '+target);
+  }
+});
+
+test('legacy queued jobs are screened again using the target language at task start', async () => {
+  const f=fixture();
+  f.items.set(1,f.parent(1,[2],'journalArticle','en')); f.items.set(2,f.attachment(2,'SOURCE01',1));
+  f.items.set(3,f.parent(3,[4],'book','de')); f.items.set(4,f.attachment(4,'SOURCE02',3));
+  f.settings.set('extensions.localpdftranslate.settings',JSON.stringify({langOut:'en'}));
+  f.plugin.jobs=[2,4].map((id,i)=>({id:'old'+id,sourceID:id,sourceKey:'SOURCE0'+(i+1),status:'queued',language:'zh'}));
+  f.plugin.runWorker=async()=>{throw new Error('must not invoke engine');};
+  await f.plugin.runQueue();
+  assert.ok(f.plugin.jobs.every(job=>job.status==='skipped'));
+  assert.match(f.plugin.jobs[0].stage,/目标语言/);
+  assert.match(f.plugin.jobs[1].stage,/不是论文/);
+  assert.equal(f.plugin.jobs[0].language,'en');
+});
+
 test('completed outputs are found using source, variant and target-language tags after renaming', async () => {
   const f = fixture(); const p = f.parent(1, [2, 3, 4]); const source = f.attachment(2, 'SOURCE01', 1);
   f.items.set(1, p); f.items.set(2, source);
@@ -227,12 +289,19 @@ test('completed outputs are found using source, variant and target-language tags
 
 test('a queue deduplicates repeated requests and does not auto-import generated files', async () => {
   const f = fixture(); const p = f.parent(1, [2]); f.items.set(1, p); f.items.set(2, f.attachment(2, 'SOURCE01', 1));
+  f.zotero.getMainWindow=()=>({setTimeout:()=>1,clearTimeout(){}});
   f.plugin.runQueue = async () => {};
   assert.equal(await f.plugin.enqueueItems([p], false), 1);
   assert.equal(await f.plugin.enqueueItems([p], false), 0);
   f.plugin.importing = 1;
+  f.items.set(50,f.attachment(50,'OUTPUT50',1,'generated.pdf',['local-pdf-translate']));
   await f.plugin.onNotify('add', 'item', [50]);
+  assert.equal(f.plugin.pendingNew.size, 1);
+  await f.plugin.promptNew();
+  f.plugin.importing = 0;
+  await f.plugin.promptNew();
   assert.equal(f.plugin.pendingNew.size, 0);
+  assert.equal(f.prompts(),0);
 });
 
 test('attachment import assigns both variants to the original parent and can resume after one succeeds', async () => {
@@ -258,6 +327,70 @@ test('new PDF prompts once and ignores generated outputs', async () => {
   assert.equal(f.prompts(), 1);
 });
 
+test('new arrivals during a slow PDF scan are drained after its debounce fired', async () => {
+  const f = fixture(), timers = new Map(); let nextTimer = 0, release, entered;
+  f.zotero.getMainWindow = () => ({setTimeout: callback => {timers.set(++nextTimer, callback); return nextTimer;}, clearTimeout: id => timers.delete(id)});
+  const started = new Promise(resolve => {entered = resolve;});
+  const gate = new Promise(resolve => {release = resolve;});
+  f.items.set(2, f.attachment(2, 'SOURCE01', 1));
+  f.items.set(3, f.attachment(3, 'SOURCE02', 1));
+  const scanned = [];
+  f.plugin.candidatesFor = async items => {
+    scanned.push(Array.from(items, item => item.id));
+    if (scanned.length === 1) {entered(); await gate;}
+    return {candidates: [], errors: []};
+  };
+  f.plugin.pendingNew.add(2);
+  const first = f.plugin.promptNew(); await started;
+  await f.plugin.onNotify('add', 'item', [3]);
+  const early = [...timers.values()][0]; timers.clear(); await early();
+  release(); await first;
+  assert.equal(timers.size, 1);
+  const next = [...timers.values()][0]; timers.clear(); await next();
+  assert.deepEqual(scanned, [[2], [3]]);
+  assert.equal(f.plugin.pendingNew.size, 0);
+});
+
+test('saving a blank API key removes the old credential and key loading blocks premature saves', async () => {
+  const f = fixture(); let stored = true, saved = 0, release;
+  f.context.Services.logins = {findLogins: () => stored ? [{password: 'old-key'}] : [], removeLogin: () => {stored = false;}};
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../src/ui/settings.js'), 'utf8'), f.context);
+  const input = {value: '', disabled: true};
+  const view = {plugin: f.plugin, keyLoading: true, root: {isConnected: true}, values: () => f.plugin.settings, $: () => input, renderEngine() {}, message() {}};
+  f.plugin.preferences.add(view);
+  f.plugin.getKey = () => new Promise(resolve => {release = resolve;});
+  const loading = f.plugin.loadPreferenceKey(view);
+  const save = f.plugin.savePreferences;
+  f.plugin.savePreferences = (...args) => {saved++; return save.apply(f.plugin, args);};
+  await f.context.SettingsView.save.call(view);
+  assert.equal(saved, 0);
+  release('old-key'); await loading;
+  assert.equal(input.value, 'old-key');
+  assert.equal(input.disabled, false);
+  input.value = '';
+  await f.context.SettingsView.save.call(view);
+  assert.equal(saved, 1);
+  assert.equal(stored, false);
+});
+
+test('new PDFs arriving during output import wait until tags are saved without being lost', async () => {
+  const f=fixture(),timers=new Map(); let next=0, scanned=0;
+  f.zotero.getMainWindow=()=>({setTimeout:fn=>{timers.set(++next,fn);return next;},clearTimeout:id=>timers.delete(id)});
+  f.items.set(1,f.parent(1,[2])); f.items.set(2,f.attachment(2,'SOURCE01',1));
+  f.plugin.candidatesFor=async items=>{scanned++;return {candidates:items,errors:[]};};
+  f.plugin.enqueueItems=async()=>1;
+  f.plugin.importing=1;
+  await f.plugin.onNotify('add','item',[2]);
+  const first=[...timers.values()][0];timers.clear();await first();
+  assert.equal(scanned,0);
+  assert.equal(f.plugin.pendingNew.size,1);
+  f.plugin.importing=0;
+  const later=[...timers.values()][0];timers.clear();await later();
+  assert.equal(scanned,1);
+  assert.equal(f.prompts(),1);
+  assert.equal(f.plugin.pendingNew.size,0);
+});
+
 test('failed translation is not marked complete and a later queued job still runs', async () => {
   const f = fixture(); f.plugin.dir = '/jobs';
   f.items.set(1, f.parent(1, [2])); f.items.set(2, f.attachment(2, 'SOURCE01', 1));
@@ -271,6 +404,7 @@ test('failed translation is not marked complete and a later queued job still run
     PathUtils:{join:(...s)=>s.join('/')}, Ci:{}, IOUtils:{makeDirectory:async()=>{}}, console });
   loadPlugin(context);
   const plugin = context.LocalTranslate;
+  plugin.getKey = async () => '';
   plugin.dir = '/jobs'; plugin.jobs = f.plugin.jobs; plugin.persist = async()=>{};
   plugin.runWorker = f.plugin.runWorker;
   plugin.attachOutputs = async () => {};
@@ -370,16 +504,112 @@ test('preparation fraction never advances the PDF translation percentage', async
   await f.plugin.runQueue(); assert.equal(f.plugin.jobs[0].status,'completed');
 });
 
-test('preparing through settings reserves the worker even while saving credentials', async () => {
-  const f=fixture(); let release;
-  f.plugin.saveSettings=()=>new Promise(resolve=>{release=resolve;});
-  f.context.IOUtils.exists=async()=>false;
-  const task=f.plugin.checkEngine('test_api',{},'private-key');
+test('API tests reserve the worker and do not save draft settings even when preparation fails', async () => {
+  const f=fixture(); let release, saved = false;
+  f.plugin.saveSettings=async()=>{saved = true;};
+  f.plugin.ensureEngine=()=>new Promise((_, reject)=>{release=()=>reject(new Error('preparation failed'));});
+  const task=f.plugin.checkEngine('test_api',{...f.plugin.settings, model:'draft-model'},'private-key');
   await assert.rejects(f.plugin.runWorker({action:'probe'}),/正在运行/);
   release(); await task;
+  assert.equal(saved,false);
+  assert.equal(f.plugin.settings.model,'deepseek-flash');
   assert.equal(f.plugin.workerTask,null);
   assert.equal(f.plugin.engineStatus.error,true);
   assert.ok(!f.plugin.engineStatus.stage.includes('private-key'));
+});
+
+test('each task keeps its starting endpoint, credential, language and import settings', async () => {
+  const f = fixture(); let entered, release, key = 'provider-a-key', preparations = 0;
+  const started = new Promise(resolve => {entered = resolve;});
+  const gate = new Promise(resolve => {release = resolve;});
+  f.plugin.getKey = async () => key;
+  f.plugin.ensureEngine = async () => {
+    if (!preparations++) {entered(); await gate;}
+    return {python:'/python',engineRoot:'/engine'};
+  };
+  f.settings.set('extensions.localpdftranslate.settings', JSON.stringify({baseURL:'https://a.invalid/v1',langOut:'ja',skipExisting:false}));
+  f.items.set(1, f.parent(1, [2, 3]));
+  f.items.set(2, f.attachment(2,'SOURCE01',1)); f.items.set(3, f.attachment(3,'SOURCE02',1));
+  f.plugin.jobs = [2, 3].map(id => ({id:'task'+id,sourceID:id,sourceKey:'SOURCE0'+(id-1),status:'queued',language:'zh',outputs:{},monoID:99}));
+  f.context.IOUtils.makeDirectory = async () => {};
+  f.plugin.dir='/profile';
+  const imports=[];
+  f.plugin.attachOutputs=async (_source, job, cfg)=>imports.push({language:job.language,skipExisting:cfg.skipExisting,monoID:job.monoID});
+  const requests = captureWorkerRequests(f);
+  const running = f.plugin.runQueue(); await started;
+  await f.plugin.saveSettings({...f.plugin.settings,baseURL:'https://b.invalid/v1',langOut:'zh',skipExisting:true});
+  key='provider-b-key'; release(); await running;
+  assert.deepEqual(requests.map(r=>[r.config.baseURL,r.apiKey,r.config.langOut]), [
+    ['https://a.invalid/v1','provider-a-key','ja'], ['https://b.invalid/v1','provider-b-key','zh']]);
+  assert.deepEqual(imports.map(i=>[i.language,i.skipExisting]), [['ja',false],['zh',true]]);
+  assert.equal(imports[0].monoID, undefined);
+  assert.ok(f.plugin.jobs.every(job=>job.status==='completed'));
+});
+
+test('configuration snapshots wait for an in-flight credential save before reading the pair', async () => {
+  const f = fixture(); let release, entered, stored;
+  const started = new Promise(resolve=>{entered=resolve;});
+  f.context.Cc={'@mozilla.org/login-manager/loginInfo;1': {createInstance:()=>({init(_a,_b,_c,_d,password){this.password=password;}})}};
+  f.context.Services.logins={findLogins:()=>[], addLoginAsync:login=>new Promise(resolve=>{
+    entered(); release=()=>{stored=login.password;resolve();};
+  })};
+  f.plugin.getKey=async()=>stored;
+  const saving=f.plugin.saveSettings({...f.plugin.settings,baseURL:'https://b.invalid/v1'},'provider-b-key');
+  await started;
+  const snapshot=f.plugin.captureConfiguration();
+  release(); await saving;
+  const result=await snapshot;
+  assert.equal(result.config.baseURL,'https://b.invalid/v1');
+  assert.equal(result.apiKey,'provider-b-key');
+});
+
+test('preview runs an isolated draft with the same URL normalization as saved tasks', async () => {
+  const f=fixture(), sample=[{label:'正文',request:{body:{model:'draft-model'}}}]; let rendered;
+  const requests=captureWorkerRequests(f,{requests:sample});
+  const view={previewRevision:3,root:{isConnected:true},renderEngine(){},finishRequestPreview(...args){rendered=args;}};
+  f.plugin.preferences.add(view);
+  const draft={...f.plugin.settings,baseURL:'https://a.invalid/v1/chat/completions',model:'draft-model'};
+  const task=f.plugin.previewRequest(view,draft,'');
+  draft.model='later-change';
+  await task;
+  assert.equal(requests[0].action,'preview');
+  assert.equal(requests[0].apiKey,'');
+  assert.equal(requests[0].config.baseURL,'https://a.invalid/v1');
+  assert.equal(requests[0].config.model,'draft-model');
+  assert.equal(f.plugin.settings.model,'deepseek-flash');
+  assert.deepEqual(JSON.parse(JSON.stringify(rendered)),[sample,3,null]);
+  assert.equal(f.plugin.engineStatus.ready,true);
+});
+
+test('request preview displays engine output and discards it if the draft changes during generation', () => {
+  const f=fixture();
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../src/ui/settings.js'),'utf8'),f.context);
+  const view=Object.create(f.context.SettingsView), fields=new Map(); let invoked;
+  for (const name of [...view.fields,...view.checks,'apiKey','request-preview','copy-request','request-kind','refresh-preview']) {
+    fields.set(name,{value:'',handlers:{},disabled:false,textContent:'',
+      addEventListener(event,fn){this.handlers[event]=fn;}, replaceChildren(){this.options=[];},append(option){this.options.push(option);}});
+  }
+  view.$=id=>fields.get(id);
+  view.root={ownerDocument:{createElementNS:()=>({})}};
+  view.plugin={previewRequest:(_view,settings,key)=>{invoked={settings,key};}};
+  view.values=()=>({...f.plugin.settings,model:'draft-model'});
+  view.renderEngine=()=>{};
+  view.setupPreviewPanel();
+  assert.equal(fields.get('copy-request').disabled,true);
+  fields.get('refresh-preview').onclick();
+  const revision=view.previewRevision;
+  assert.equal(invoked.key,''); assert.equal(invoked.settings.model,'draft-model');
+  const result=[{label:'正文',request:{method:'POST',body:{model:'draft-model',thinking:{type:'disabled'}}}}];
+  view.finishRequestPreview(result,revision);
+  assert.deepEqual(JSON.parse(fields.get('request-preview').textContent),result[0].request);
+  assert.equal(fields.get('copy-request').disabled,false);
+  assert.equal(fields.get('request-kind').options[0].textContent,'正文');
+  fields.get('refresh-preview').onclick();
+  fields.get('model').handlers.input();
+  view.finishRequestPreview(result,revision);
+  assert.equal(view.previewBusy,false);
+  assert.equal(fields.get('copy-request').disabled,true);
+  assert.match(fields.get('request-preview').textContent,/配置已更改/);
 });
 
 test('destroyed preference sandboxes cannot stop background status updates', () => {

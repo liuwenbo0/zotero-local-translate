@@ -42,16 +42,45 @@ Object.assign(LocalTranslate, {
     return translated;
   },
 
+  async sourceSkipReason(source, cfg) {
+    if (!source.isPDFAttachment()) return "不是 PDF 附件";
+    const parent = source.parentItemID ? await Zotero.Items.getAsync(source.parentItemID) : null;
+    if (!parent || parent.deleted || !["journalArticle", "conferencePaper", "preprint", "thesis"].includes(parent.itemType)) return "不是论文条目下的 PDF";
+    // Match explicit language metadata only. Unknown or multilingual values stay eligible.
+    const normalize = value => {
+      const name = String(value || "").trim().toLowerCase().replace(/_/g, "-");
+      const aliases = {
+        eng: "en", english: "en", 英语: "en", 英文: "en",
+        zho: "zh", chi: "zh", chinese: "zh", 中文: "zh", 汉语: "zh",
+        "zh-cn": "zh-hans", "zh-sg": "zh-hans", "simplified chinese": "zh-hans", 简体中文: "zh-hans",
+        "zh-tw": "zh-hant", "zh-hk": "zh-hant", "traditional chinese": "zh-hant", 繁體中文: "zh-hant", 繁体中文: "zh-hant",
+        jpn: "ja", japanese: "ja", 日语: "ja", 日文: "ja", 日本語: "ja",
+        deu: "de", ger: "de", german: "de", fra: "fr", fre: "fr", french: "fr",
+        kor: "ko", korean: "ko", rus: "ru", russian: "ru", spa: "es", spanish: "es",
+        por: "pt", portuguese: "pt", ara: "ar", arabic: "ar",
+      };
+      return aliases[name] || (/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/.test(name) ? name : "");
+    };
+    const language = normalize(parent.getField("language")), target = normalize(cfg.langOut === "zh" ? "zh-Hans" : cfg.langOut);
+    if (!language || !target || language.split("-")[0] !== target.split("-")[0]) return "";
+    // Keep explicit Simplified/Traditional Chinese conversions possible.
+    if (language === "zh" && target === "zh-hant") return "";
+    if (language.startsWith("zh-") && target.startsWith("zh-") && language !== target) return "";
+    return "条目语言已是目标语言";
+  },
+
   async candidatesFor(items, report) {
-    const sources = await this.sourcesFor(items);
+    const cfg = this.settings;
+    const sources = await this.sourcesFor(items, cfg);
+    const activeSources = new Set(this.jobs.filter(j => ["queued", "running", "importing", "interrupted"].includes(j.status)).map(j => j.sourceID));
     const candidates = [], errors = [], parents = new Map();
     for (const [index, source] of sources.entries()) {
       if (this.stopping || this.clearing) return { candidates: [], errors, cancelled: true };
       report?.(index + 1, sources.length);
-      if (this.jobs.some(j => j.sourceID === source.id && ["queued", "running", "importing", "interrupted"].includes(j.status))) continue;
+      if (activeSources.has(source.id)) continue;
       try {
         if (await this.isTranslatedPDF(source)) continue;
-        if (this.settings.skipExisting && source.parentItemID) {
+        if (cfg.skipExisting && source.parentItemID) {
           if (!parents.has(source.parentItemID)) {
             const parent = await Zotero.Items.getAsync(source.parentItemID);
             let translated = false;
@@ -68,13 +97,13 @@ Object.assign(LocalTranslate, {
     return { candidates, errors };
   },
 
-  async sourcesFor(items) {
+  async sourcesFor(items, cfg = this.settings) {
     const sources = new Map();
     for (const item of items) {
       if (!item || item.deleted || !Zotero.Libraries.get(item.libraryID)?.editable) continue;
       let attachments = item.isPDFAttachment() ? [item] : item.isRegularItem() ? await Zotero.Items.getAsync(item.getAttachments()) : [];
       for (const a of attachments) {
-        if (a.isPDFAttachment() && !a.deleted && !this.isTranslation(a) && await a.fileExists()) sources.set(a.id, a);
+        if (a.isPDFAttachment() && !a.deleted && !this.isTranslation(a) && !await this.sourceSkipReason(a, cfg) && await a.fileExists()) sources.set(a.id, a);
       }
     }
     return [...sources.values()];
@@ -98,7 +127,7 @@ Object.assign(LocalTranslate, {
     return output;
   },
 
-  async attachOutputs(source, job) {
+  async attachOutputs(source, job, cfg = this.settings) {
     if (source.deleted) throw new Error("原附件已删除，不添加译文");
     if (!source.parentItemID) {
       await Zotero.DB.executeTransaction(async () => {
@@ -115,7 +144,7 @@ Object.assign(LocalTranslate, {
     this.importing++;
     try {
       for (const variant of ["mono", "dual"]) {
-        if (this.settings.skipExisting && existing[variant]) continue;
+        if (cfg.skipExisting && existing[variant]) continue;
         const file = job.outputs[variant];
         if (!file || !(await IOUtils.exists(file))) throw new Error(`缺少 ${variant} PDF，未标记为完成`);
         let attachment = job[variant + "ID"] ? await Zotero.Items.getAsync(job[variant + "ID"]) : null;

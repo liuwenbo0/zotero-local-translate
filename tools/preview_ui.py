@@ -49,8 +49,7 @@ for node in prefs.iter():
     node.tag = node.tag.split("}")[-1]
 settings_body = ET.tostring(prefs, encoding="unicode", method="html")
 
-mock = (
-    """
+mock = """
 const demo = { version:PLUGIN_VERSION, settings:DEFAULT_SETTINGS, paused:true, windows:new Set(), preferences:new Set(),
   jobs:[
     {id:'done',title:'A survey of retrieval-augmented generation',language:'zh',status:'completed',progress:100},
@@ -59,7 +58,7 @@ const demo = { version:PLUGIN_VERSION, settings:DEFAULT_SETTINGS, paused:true, w
     {id:'active',title:'Attention Is All You Need — A long document title to verify wrapping and progress updates',language:'zh',status:'running',progress:38,stage:'翻译段落',stageCurrent:12,stageTotal:40}],
   changed(){window.renderTasks?.(); for(const view of this.preferences) view.renderEngine();}, persist:async()=>{}, runQueue:async()=>{},
   saveSettings:async function(settings){this.settings=settings;},
-  loadPreferenceKey:async()=>{},
+  loadPreferenceKey:async view=>{view.keyLoading=false;view.$('apiKey').disabled=false;},
   clearQueue:async function(){this.jobs=[];this.changed();},
   cancelJobs:async function(ids){for(const id of ids) await this.cancel(id);},
   retryJobs:async function(ids){for(const id of ids) await this.retry(id);},
@@ -68,6 +67,7 @@ const demo = { version:PLUGIN_VERSION, settings:DEFAULT_SETTINGS, paused:true, w
   openSettings(){location.search="?settings";},
   safeError:error=>error.message,
   checkEngine(){this.engineStatus={stage:"下载 / 校验模型与字体",busy:true,progress:null};this.changed();},
+  previewRequest(view){view.finishRequestPreview(null,view.previewRevision,'独立界面预览不运行引擎，请在 Zotero 中生成实际请求。');},
   enqueueScope:async()=>message('预览模式：不会加入实际任务。'),
   cancel:async function(id){this.jobs.find(j=>j.id===id).status='cancelled';this.changed();},
   removeJob:async function(id){this.jobs=this.jobs.filter(j=>j.id!==id);this.changed();},
@@ -76,11 +76,9 @@ const demo = { version:PLUGIN_VERSION, settings:DEFAULT_SETTINGS, paused:true, w
 if(new URLSearchParams(location.search).has("empty")) demo.jobs=[];
 var Zotero = {LocalTranslate:demo,UIProperties:{registerRoot(){}},
   getActiveZoteroPane:()=>({selectItem:()=>message('预览模式：不会操作 Zotero。')})};
-""".replace("DEFAULT_SETTINGS", json.dumps(settings, ensure_ascii=False))
-    .replace(
-        "PLUGIN_VERSION",
-        json.dumps(json.loads((ROOT / "addon/manifest.json").read_text())["version"]),
-    )
+""".replace("DEFAULT_SETTINGS", json.dumps(settings, ensure_ascii=False)).replace(
+    "PLUGIN_VERSION",
+    json.dumps(json.loads((ROOT / "addon/manifest.json").read_text())["version"]),
 )
 scripts = "\n".join(
     (ROOT / "src/ui" / name).read_text()
@@ -125,7 +123,7 @@ window.addEventListener('load',()=>{
 output.parent.mkdir(exist_ok=True)
 output.write_text(
     '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>翻译窗口预览</title>'
-    f'<style>:root{{{themes[0]}}}@media (prefers-color-scheme: dark){{:root{{{themes[1]}}}}}</style>'
+    f"<style>:root{{{themes[0]}}}@media (prefers-color-scheme: dark){{:root{{{themes[1]}}}}}</style>"
     f"<style>{styles}\n{preview_css}</style>"
     '<div class="preview-controls"><span>界面预览 · 使用示例任务，不连接 API</span>'
     '<a href="?settings">设置</a><a href="?tasks">任务</a></div>'

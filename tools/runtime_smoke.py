@@ -138,7 +138,7 @@ async function runSmoke() {
       const prefWindow = plugin.openSettings();
       for (let n=0; n<150; n++) {
         const view = prefWindow.Zotero_Preferences?.getScope("local-pdf-translate-settings")?.SettingsView;
-        if (view?.root?.isConnected) return {prefWindow,view};
+        if (view?.root?.isConnected && !view.keyLoading) return {prefWindow,view};
         await Zotero.Promise.delay(100);
       }
       throw new Error("Native preferences failed to initialize");
@@ -215,6 +215,28 @@ async function runSmoke() {
     check("custom key stored in login manager", (await p.getKey()) === "isolated-test-key");
     check("settings do not contain API key", !Zotero.Prefs.get("extensions.localpdftranslate.settings", true).includes("isolated-test-key"));
     await p.saveSettings(originalSettings);
+    field("apiKey").value=""; await settingsView.save();
+    check("blank key in native settings clears the saved credential", await p.getKey() === "");
+    const previewStored = JSON.stringify(p.settings);
+    field("baseURL").value="https://example.invalid/v1/chat/completions";
+    field("thinkingProtocol").value="thinking"; field("thinking").value="disabled";
+    field("model").value="offline-preview-model";
+    settingsView.showCategory("service");
+    field("refresh-preview").click();
+    await p.workerTask;
+    for (let n=0; settingsView.previewBusy && n<100; n++) await Zotero.Promise.delay(20);
+    check("native request preview is read-only and has no partial apply action", !field("request-preview").isContentEditable && !field("apply-preview"));
+    check("native preview lists real engine request types", settingsView.previewRequests.length === 5 && field("request-kind").options.length === 5);
+    const previewRequest = JSON.parse(field("request-preview").textContent);
+    check("native preview uses actual anonymous request parameters", previewRequest.url === "https://example.invalid/v1/chat/completions" && !previewRequest.headers.authorization && previewRequest.body.model === "offline-preview-model" && previewRequest.body.thinking.type === "disabled" && !("temperature" in previewRequest.body) && !("max_tokens" in previewRequest.body));
+    check("generating a preview preserves saved settings", JSON.stringify(p.settings) === previewStored);
+    field("request-kind").value="4"; field("request-kind").dispatchEvent(new prefWindow.Event("change"));
+    check("native preview switches to the actual API test body", JSON.parse(field("request-preview").textContent).body.max_tokens === 128);
+    field("model").value="changed-after-preview"; field("model").dispatchEvent(new prefWindow.Event("input"));
+    check("editing settings invalidates the old preview", field("copy-request").disabled && field("request-kind").disabled && field("request-preview").textContent.includes("配置已更改"));
+    for (const id of settingsView.fields) field(id).value=originalSettings[id];
+    for (const id of settingsView.checks) field(id).checked=originalSettings[id];
+    await p.saveSettings(originalSettings,"isolated-test-key");
     prefWindow.close(); await Zotero.Promise.delay(50);
     ({prefWindow,view:settingsView} = await waitPane(p));
     for(let n=0; !field("apiKey").value && n<50; n++) await Zotero.Promise.delay(10);
@@ -252,6 +274,14 @@ async function runSmoke() {
     await parent.saveTx();
     const source = await Zotero.Attachments.importFromFile({ file: TEST_ROOT + "/fixture.pdf", parentItemID: parent.id });
     check("source PDF imported in isolated library", await source.fileExists());
+    const chinese = new Zotero.Item("journalArticle"); chinese.libraryID=parent.libraryID;
+    chinese.setField("title","Already in target language"); chinese.setField("language","中文"); await chinese.saveTx();
+    const chinesePDF=await Zotero.Attachments.importFromFile({file:TEST_ROOT+"/fixture.pdf",parentItemID:chinese.id});
+    const book = new Zotero.Item("book"); book.libraryID=parent.libraryID;
+    book.setField("title","Non-paper fixture"); await book.saveTx();
+    const bookPDF=await Zotero.Attachments.importFromFile({file:TEST_ROOT+"/fixture.pdf",parentItemID:book.id});
+    const standalone=await Zotero.Attachments.importFromFile({file:TEST_ROOT+"/fixture.pdf"});
+    check("native screening skips target-language papers, non-papers and standalone PDFs", (await p.sourcesFor([chinese,chinesePDF,book,bookPDF,standalone])).length===0);
     check("progress page has no duplicated translation entry buttons", !win.document.getElementById("selected") && !win.document.getElementById("collection") && !win.document.getElementById("library"));
     const oldParent = new Zotero.Item("journalArticle"); oldParent.libraryID=parent.libraryID;
     oldParent.setField("title","Previously translated fixture"); await oldParent.saveTx();
@@ -336,9 +366,9 @@ async function runSmoke() {
     check("document, progress and status cells share one row edge", Math.abs(titleCell.getBoundingClientRect().bottom-statusCell.getBoundingClientRect().bottom)<1 && Math.abs(titleCell.getBoundingClientRect().right-progressCell.getBoundingClientRect().left)<1 && Math.abs(progressCell.getBoundingClientRect().right-statusCell.getBoundingClientRect().left)<1);
     check("running row shows a bar, percentage and stage count", !activeRow.parts.progressBar.hidden && activeRow.parts.progressBar.value===37 && activeRow.parts.progressPercent.textContent==="37%" && activeRow.parts.statusContent.textContent.includes("翻译段落") && activeRow.parts.statusContent.textContent.includes("12/40"));
     check("running status icon is restored", reviewWin.getComputedStyle(activeRow.parts.statusContent,"::before").maskImage.includes("status-running.svg"));
-    const toolbar = doc.querySelector(".toolbar"), queueStatus = doc.querySelector(".queue-status"), tableWrap = doc.querySelector(".table-wrap");
+    const taskToolbar = doc.querySelector(".toolbar"), queueStatus = doc.querySelector(".queue-status"), tableWrap = doc.querySelector(".table-wrap");
     check("queue counts and status occupy separate lines", doc.getElementById("summary").getBoundingClientRect().bottom <= doc.getElementById("queue-state").getBoundingClientRect().top);
-    check("queue toolbar is separated from the task list", toolbar.getBoundingClientRect().bottom+7 <= tableWrap.getBoundingClientRect().top);
+    check("queue toolbar is separated from the task list", taskToolbar.getBoundingClientRect().bottom+7 <= tableWrap.getBoundingClientRect().top);
     reviewWin.TaskView.select("visual-active");
     const cancel = doc.querySelector("#task-actions button"); cancel.focus();
     review.jobs.at(-1).progress = 38; review.changed();

@@ -27,11 +27,10 @@ Object.assign(LocalTranslate, {
     if (scan.cancelled || this.stopping || this.clearing) return 0;
     const { candidates, errors } = scan;
     const unreadable = errors.length ? `\n${errors.length} 个 PDF 无法检查，已跳过：\n${errors.slice(0, 3).join("\n")}` : "";
-    if (!candidates.length) { if (confirm) this.alert("没有需要翻译的本地 PDF；已有译文、队列中的文件和不可用附件已跳过。" + unreadable); return 0; }
+    if (!candidates.length) { if (confirm) this.alert("没有需要翻译的论文 PDF；非论文、非 PDF、目标语言条目、已有译文、队列中的文件和不可用附件已跳过。" + unreadable); return 0; }
     if (confirm) {
-      const standalone = candidates.some(s => !s.parentItemID) ? "\n独立 PDF 翻译完成后会创建父条目。" : "";
       const count = new Set(candidates.map(s => s.parentItemID || s.id)).size;
-      const answer = Services.prompt.confirm(Zotero.getMainWindow(), "确认翻译", `将翻译 ${candidates.length} 个 PDF（${count} 条文献），生成 mono 和 dual 子附件。\n正文会发送到你配置的 API，并产生对应 API 用量。${standalone}${unreadable}`);
+      const answer = Services.prompt.confirm(Zotero.getMainWindow(), "确认翻译", `将翻译 ${candidates.length} 个 PDF（${count} 条文献），生成 mono 和 dual 子附件。\n正文会发送到你配置的 API，并产生对应 API 用量。${unreadable}`);
       if (!answer) return 0;
     }
     let added = 0;
@@ -71,10 +70,16 @@ Object.assign(LocalTranslate, {
           if (!job) break;
           this.currentJob = job;
           try {
+            const configuration = await this.captureConfiguration();
+            const cfg = configuration.config;
+            if (job.language !== cfg.langOut) {
+              job.outputs = {}; delete job.monoID; delete job.dualID;
+            }
+            job.language = cfg.langOut;
             const source = await Zotero.Items.getAsync(job.sourceID);
             if (!source || source.deleted || source.key !== job.sourceKey) throw new Error("原附件不存在或已删除");
-            const cfg = this.settings;
-            if (job.language !== cfg.langOut) throw new Error("目标语言已改变，请移除此任务后重新加入");
+            const skipReason = await this.sourceSkipReason(source, cfg);
+            if (skipReason) { job.status = "skipped"; job.preparing = false; job.stage = skipReason + "，已跳过"; continue; }
             if (!Zotero.Libraries.get(source.libraryID).filesEditable) throw new Error("当前文库不允许添加文件");
             const path = await source.getFilePathAsync();
             if (!path || !(await source.fileExists())) throw new Error("原 PDF 尚未下载到本地");
@@ -121,14 +126,14 @@ Object.assign(LocalTranslate, {
                 job.totalParts = event.totalParts;
                 this.changed();
               }
-            });
+            }, configuration);
             if (job.cancelRequested || this.stopping) { job.status = this.stopping ? "interrupted" : "cancelled"; continue; }
             if (result.skipped) { job.status = "skipped"; job.preparing = false; job.stage = "原文件已是译文，已跳过"; continue; }
             job.outputs = result.outputs;
             job.preparing = false;
             job.status = "importing"; job.stage = "添加 mono / dual 子附件"; job.progress = 98;
             this.changed(); await this.persist();
-            await this.attachOutputs(source, job);
+            await this.attachOutputs(source, job, cfg);
             job.status = "completed"; job.stage = "完成"; job.progress = 100;
           } catch (error) {
             job.status = this.stopping ? "interrupted" : job.cancelRequested ? "cancelled" : "failed";
@@ -187,7 +192,7 @@ Object.assign(LocalTranslate, {
   },
 
   async onNotify(event, type, ids) {
-    if (type !== "item" || this.importing || this.stopping || !this.settings.askOnNew) return;
+    if (type !== "item" || this.stopping || !this.settings.askOnNew) return;
     if (event !== "add" && !["modify", "refresh"].includes(event)) return;
     for (const id of ids) if (event === "add" || this.waitingFiles.has(id)) this.pendingNew.add(id);
     if (!this.pendingNew.size) return;
@@ -196,13 +201,19 @@ Object.assign(LocalTranslate, {
   },
 
   async promptNew() {
-    if (this.stopping || this.prompting) return;
+    if (this.stopping || this.prompting || !this.settings.askOnNew) return;
+    // Defer during attachment import, but retain unrelated PDFs added at that time.
+    if (this.importing) {
+      if (this.newTimer) Zotero.getMainWindow()?.clearTimeout(this.newTimer);
+      this.newTimer = Zotero.getMainWindow()?.setTimeout(() => this.promptNew().catch(e => Zotero.debug(this.safeError(e))), 2500);
+      return;
+    }
     this.prompting = true;
     try {
       const ids = [...this.pendingNew]; this.pendingNew.clear();
       const items = await Zotero.Items.getAsync(ids);
       for (const item of items) {
-        if (item.isPDFAttachment() && !item.deleted && !this.isTranslation(item) && !(await item.fileExists())) {
+        if (item.isPDFAttachment() && !item.deleted && !this.isTranslation(item) && !await this.sourceSkipReason(item, this.settings) && !(await item.fileExists())) {
           if (!this.waitingFiles.has(item.id)) this.waitingFiles.set(item.id, Date.now());
         } else this.waitingFiles.delete(item.id);
       }
@@ -215,11 +226,14 @@ Object.assign(LocalTranslate, {
     } finally {
       this.prompting = false;
       const waiting = [...this.waitingFiles].filter(([, added]) => Date.now() - added < 120000).map(([id]) => id);
-      if (waiting.length && !this.stopping && this.settings.askOnNew) {
+      // A debounce timer may have fired while the previous scan was awaiting PDF data.
+      // Always drain those new arrivals after that scan, even without pending downloads.
+      if ((this.pendingNew.size || waiting.length) && !this.stopping && this.settings.askOnNew) {
+        if (this.newTimer) Zotero.getMainWindow()?.clearTimeout(this.newTimer);
         this.newTimer = Zotero.getMainWindow()?.setTimeout(() => {
           for (const id of waiting) this.pendingNew.add(id);
-          this.promptNew().catch(e => Zotero.debug(this.safeError(e)));
-        }, 5000);
+          return this.promptNew().catch(e => Zotero.debug(this.safeError(e)));
+        }, this.pendingNew.size ? 2500 : 5000);
       }
     }
   },

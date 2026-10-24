@@ -93,7 +93,26 @@ Object.assign(LocalTranslate, {
                 job.stage = event.stage; this.changed();
               } else if (event.type === "progress") {
                 job.preparing = false;
-                if (Number.isFinite(event.progress)) job.progress = Math.max(job.progress || 0, Math.min(97, event.progress * .97));
+                // Worker progress and stage estimates both use percentages (0–100).
+                let overallProgress = event.progress;
+                if (overallProgress == null && event.stage) {
+                  // Stage-based progress estimation when overall_progress is not available
+                  const stage = String(event.stage || "").toLowerCase();
+                  const stageProgress = Number.isFinite(event.stageProgress) ? event.stageProgress : 0;
+                  // Stage weight allocation: term extraction ~15%, translation ~70%, layout/save ~15%
+                  if (/term|glossary|extract/i.test(stage)) {
+                    overallProgress = 0.15 * stageProgress;
+                  } else if (/translat|paragraph|sentence/i.test(stage)) {
+                    overallProgress = 15 + 0.70 * stageProgress;
+                  } else if (/layout|parse|formula|table|font|save|typeset|pdf/i.test(stage)) {
+                    overallProgress = 85 + 0.15 * stageProgress;
+                  } else {
+                    overallProgress = stageProgress;
+                  }
+                }
+                if (Number.isFinite(overallProgress)) {
+                  job.progress = Math.max(job.progress || 0, Math.min(97, overallProgress * .97));
+                }
                 job.stage = event.stage || "翻译中";
                 job.stageProgress = event.stageProgress;
                 job.stageCurrent = event.stageCurrent;

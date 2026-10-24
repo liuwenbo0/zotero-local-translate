@@ -2,10 +2,10 @@
 var SettingsView = {
   category: "general", searching: false,
   categories: ["general", "service", "quality", "pdf", "advanced"],
-  fields: ["baseURL", "model", "langIn", "langOut", "qps", "timeout", "thinking", "thinkingProtocol", "reasoningEffort",
+  fields: ["baseURL", "model", "langIn", "langOut", "rpm", "timeout", "thinking", "thinkingProtocol", "reasoningEffort",
     "maxWorkers", "minTextLength", "customPrompt", "fontFamily", "dualMode", "watermark", "ocrMode",
     "shortLineSplitFactor", "maxPagesPerPart", "formulaFontPattern", "formulaCharPattern", "figureTableProtectionThreshold"],
-  numbers: new Set(["qps", "timeout", "maxWorkers", "minTextLength", "shortLineSplitFactor", "maxPagesPerPart", "figureTableProtectionThreshold"]),
+  numbers: new Set(["rpm", "timeout", "maxWorkers", "minTextLength", "shortLineSplitFactor", "maxPagesPerPart", "figureTableProtectionThreshold"]),
   checks: ["askOnNew", "includeSubcollections", "skipExisting", "autoExtractGlossary", "ignoreCache",
     "dualTranslateFirst", "enhanceCompatibility", "preserveRichText", "splitShortLines", "skipScannedDetection"],
 
@@ -20,7 +20,7 @@ var SettingsView = {
     const settings = this.plugin.settings;
     for (const id of this.fields) this.$(id).value = settings[id];
     for (const id of this.checks) this.$(id).checked = settings[id];
-    this.setupNumberControls();
+    this.setupPreviewPanel();
     const updateCompatibility = () => {
       this.$("preserveRichText").disabled = this.$("enhanceCompatibility").checked;
       this.$("skipScannedDetection").disabled = this.$("ocrMode").value === "auto";
@@ -44,6 +44,7 @@ var SettingsView = {
         this.showCategory(this.categories[next], true);
       };
     }
+    this.showCategory(this.category);
     this.$("settings-form").onsubmit = event => {
       event.preventDefault();
       this.save();
@@ -54,34 +55,6 @@ var SettingsView = {
   },
 
   destroy() { this.plugin.preferences.delete(this); },
-
-  setupNumberControls() {
-    for (const id of this.numbers) {
-      const input = this.$(id);
-      if (!input || input.parentElement.classList.contains("number-control")) continue;
-      const wrapper = input.ownerDocument.createElement("span");
-      wrapper.className = "number-control";
-      input.parentElement.insertBefore(wrapper, input);
-      wrapper.append(input);
-      const buttons = input.ownerDocument.createElement("span");
-      buttons.className = "number-control-buttons";
-      for (const [direction, label] of [["up", "增加"], ["down", "减少"]]) {
-        const button = input.ownerDocument.createElement("button");
-        button.type = "button";
-        button.className = "number-control-button number-control-button-" + direction;
-        button.textContent = direction === "up" ? "▲" : "▼";
-        button.setAttribute("aria-label", label + (input.getAttribute("aria-label") || input.id));
-        button.title = label;
-        button.onclick = () => {
-          input[direction === "up" ? "stepUp" : "stepDown"]();
-          input.dispatchEvent(new input.ownerDocument.defaultView.Event("input", { bubbles: true }));
-          input.dispatchEvent(new input.ownerDocument.defaultView.Event("change", { bubbles: true }));
-        };
-        buttons.append(button);
-      }
-      wrapper.append(buttons);
-    }
-  },
 
   message(text, error = false) {
     if (!this.root.isConnected) return;
@@ -125,6 +98,8 @@ var SettingsView = {
     this.root.querySelector(".settings-nav").hidden = !!term;
     if (term) {
       this.searching = true;
+      const preview = this.root.querySelector(".settings-preview");
+      if (preview) preview.hidden = true;
       for (const name of this.categories) this.$("settings-" + name).hidden = !this.$("settings-" + name).textContent.toLocaleLowerCase().includes(term);
     } else if (this.searching) {
       this.searching = false;
@@ -134,6 +109,9 @@ var SettingsView = {
 
   showCategory(category, focus = false) {
     this.category = category;
+    const preview = this.root.querySelector(".settings-preview");
+    const showPreview = category === "service" && !this.searching;
+    if (preview) preview.hidden = !showPreview;
     for (const name of this.categories) {
       const selected = category === name;
       this.$("settings-" + name).hidden = !selected;
@@ -164,5 +142,87 @@ var SettingsView = {
     const key = action === "probe" ? undefined : this.$("apiKey").value.trim() || undefined;
     // No long-lived promise callbacks in a preference sandbox that Zotero may destroy.
     this.plugin.checkEngine(action, settings, key);
+  },
+
+  setupPreviewPanel() {
+    const updatePreview = () => {
+      const settings = this.values();
+      const request = {
+        model: settings.model,
+        messages: [
+          { role: "system", content: settings.customPrompt || "You are a professional translator." },
+          { role: "user", content: `Translate the following ${settings.langIn} text to ${settings.langOut}:\n\n[Sample text here]` }
+        ],
+        temperature: 0.3,
+        max_tokens: 2000
+      };
+
+      if (settings.thinking !== "default") {
+        if (settings.thinkingProtocol === "thinking") {
+          request.thinking = { type: settings.thinking };
+        } else if (settings.thinkingProtocol === "enable_thinking") {
+          request.enable_thinking = settings.thinking === "enabled";
+        } else if (settings.thinkingProtocol === "reasoning_effort") {
+          request.reasoning_effort = settings.thinking === "enabled" ? settings.reasoningEffort : "none";
+        }
+      }
+
+      const preview = this.$("request-preview");
+      preview.querySelector("code").textContent = JSON.stringify(request, null, 2);
+    };
+
+    // Update preview on any field change
+    for (const id of this.fields) {
+      const el = this.$(id);
+      if (el) {
+        el.addEventListener("input", updatePreview);
+        el.addEventListener("change", updatePreview);
+      }
+    }
+    for (const id of this.checks) {
+      const el = this.$(id);
+      if (el) el.addEventListener("change", updatePreview);
+    }
+
+    // Copy button
+    this.$("copy-request").onclick = () => {
+      const text = this.$("request-preview").textContent;
+      navigator.clipboard.writeText(text).then(() => {
+        this.message("已复制到剪贴板");
+      }).catch(() => {
+        this.message("复制失败", true);
+      });
+    };
+
+    // Apply edited preview back to form
+    this.$("apply-preview").onclick = () => {
+      try {
+        const edited = JSON.parse(this.$("request-preview").textContent);
+        if (edited.model) this.$("model").value = edited.model;
+        if (edited.messages?.[0]?.content) this.$("customPrompt").value = edited.messages[0].content;
+        if (edited.thinking) {
+          this.$("thinkingProtocol").value = "thinking";
+          this.$("thinking").value = edited.thinking.type || "enabled";
+        } else if (edited.enable_thinking !== undefined) {
+          this.$("thinkingProtocol").value = "enable_thinking";
+          this.$("thinking").value = edited.enable_thinking ? "enabled" : "disabled";
+        } else if (edited.reasoning_effort) {
+          this.$("thinkingProtocol").value = "reasoning_effort";
+          if (edited.reasoning_effort !== "none") {
+            this.$("thinking").value = "enabled";
+            this.$("reasoningEffort").value = edited.reasoning_effort;
+          } else {
+            this.$("thinking").value = "disabled";
+          }
+        }
+        updatePreview();
+        this.message("已应用预览中的修改");
+      } catch (error) {
+        this.message("JSON 格式错误：" + error.message, true);
+      }
+    };
+
+    // Initial render
+    updatePreview();
   },
 };

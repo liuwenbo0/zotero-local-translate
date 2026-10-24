@@ -52,6 +52,7 @@ def install_openai_compatibility():
 
     validate_headers = OpenAI._validate_headers
     if not getattr(validate_headers, "_local_translate_headers", False):
+
         def validate_compatible_headers(self, headers, custom_headers):
             if self.api_key == ANONYMOUS_API_KEY:
                 headers.pop("Authorization", None)
@@ -63,6 +64,7 @@ def install_openai_compatibility():
 
     build_headers = BaseClient._build_headers
     if not getattr(build_headers, "_local_translate_headers", False):
+
         def build_compatible_headers(self, options, *, retries_taken=0):
             headers = build_headers(self, options, retries_taken=retries_taken)
             if urlsplit(str(self.base_url)).hostname == "index-translate.bilibili.com":
@@ -76,7 +78,35 @@ def install_openai_compatibility():
         BaseClient._build_headers = build_compatible_headers
 
 
+def install_rpm_compatibility():
+    from pdf2zh_next.config.model import SettingsModel
+
+    validate_settings = SettingsModel.validate_settings
+    if getattr(validate_settings, "_local_translate_fractional_qps", False):
+        return
+
+    def validate_fractional_qps(self):
+        # The pinned engine rejects QPS below 1, while its limiter supports it.
+        # Validate all other settings at 1 QPS, then restore the requested rates.
+        fractional = {
+            name: value
+            for name in ("qps", "term_qps")
+            if (value := getattr(self.translation, name)) is not None and 0 < value < 1
+        }
+        try:
+            for name in fractional:
+                setattr(self.translation, name, 1)
+            return validate_settings(self)
+        finally:
+            for name, value in fractional.items():
+                setattr(self.translation, name, value)
+
+    validate_fractional_qps._local_translate_fractional_qps = True
+    SettingsModel.validate_settings = validate_fractional_qps
+
+
 install_openai_compatibility()
+install_rpm_compatibility()
 
 
 def reasoning_options(cfg, base_url):
@@ -162,10 +192,16 @@ def build_settings(payload):
     settings.basic.debug = False
     settings.translation.lang_in = cfg.get("langIn", "en")
     settings.translation.lang_out = cfg.get("langOut", "zh")
-    settings.translation.qps = int(cfg.get("qps", 4))
+    # Convert RPM to QPS; worker counts must remain positive integers.
+    rpm = int(cfg.get("rpm", 240))
+    if not 1 <= rpm <= 6000:
+        raise ValueError("RPM must be between 1 and 6000")
+    settings.translation.qps = rpm / 60.0
     settings.translation.term_qps = settings.translation.qps
     settings.translation.output = payload.get("output")
-    settings.translation.pool_max_workers = int(cfg.get("maxWorkers", 0)) or None
+    settings.translation.pool_max_workers = int(cfg.get("maxWorkers", 0)) or max(
+        1, (rpm + 59) // 60
+    )
     settings.translation.term_pool_max_workers = settings.translation.pool_max_workers
     settings.translation.min_text_length = int(cfg.get("minTextLength", 5))
     settings.translation.no_auto_extract_glossary = not cfg.get(

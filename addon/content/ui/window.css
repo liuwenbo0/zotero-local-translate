@@ -1,6 +1,5 @@
 /* Zotero supplies theme tokens, system typography and native control defaults. */
 :root {
-  color-scheme: light dark;
   color: var(--fill-primary, CanvasText);
   background: var(--color-background, Canvas);
 }
@@ -44,24 +43,29 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 24px;
+  min-height: 28px;
   margin: 0;
-  padding: 3px 10px;
+  padding: 5px 12px;
   border: 1px solid var(--color-border, ThreeDShadow);
-  border-radius: 4px;
+  border-radius: 5px;
   color: inherit;
   background: var(--color-button, ButtonFace);
   cursor: default;
-  line-height: 1.2;
+  line-height: 1.3;
   text-align: center;
+  font-size: 0.95em;
+  transition: all 0.12s ease;
 }
 
 button:hover:not(:disabled) {
   background: var(--color-quinary-on-background, ButtonFace);
+  border-color: var(--color-border-hover, ThreeDShadow);
+  transform: translateY(-0.5px);
 }
 
 button:active:not(:disabled) {
   background: var(--color-quarternary-on-background, ButtonFace);
+  transform: translateY(0);
 }
 
 button:disabled {

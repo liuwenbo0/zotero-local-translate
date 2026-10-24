@@ -22,6 +22,7 @@ window.addEventListener("load", () => {
   $("open-settings").onclick = () => plugin.openSettings();
 
   $("clear-queue").onclick = () => { message(""); plugin.clearQueue().catch(error => message(error.message, true)); };
+  $("error-dialog-close").onclick = () => $("error-dialog").close();
   $("pause").onclick = async () => {
     try {
       if (plugin.paused) {

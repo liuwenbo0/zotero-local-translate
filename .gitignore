@@ -5,6 +5,10 @@ dist/
 /FACT.html
 /RULE.html
 /subplan_*.html
+# Local UI design drafts, standalone previews, and screenshots
+/DESIGN.html
+/UI-PREVIEW*.html
+/PixPin_*.png
 tmp/
 __pycache__/
 *.pyc

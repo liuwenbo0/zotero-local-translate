@@ -1,4 +1,5 @@
 <h:section xmlns:h="http://www.w3.org/1999/xhtml" id="local-translate-settings">
+      <h:div class="settings-container">
       <h:div class="settings-layout">
         <h:nav role="tablist" aria-label="设置分类" aria-orientation="horizontal" class="settings-nav">
           <h:button id="local-translate-settings-tab-general" type="button" role="tab" aria-controls="local-translate-settings-general" aria-selected="true" tabindex="0">常规</h:button>
@@ -66,69 +67,81 @@
             </h:section>
           </h:section>
           <h:section id="local-translate-settings-service" role="tabpanel" aria-labelledby="local-translate-settings-tab-service" hidden="hidden">
-            <h:p class="settings-description">填写自己的 OpenAI 兼容 API；引擎在首次使用时自动准备</h:p>
             <h:section class="settings-group">
-              <h:h3>翻译 API</h:h3>
-              <h:div id="local-translate-custom-api">
-                <h:div class="form-row">
-                  <h:label for="local-translate-baseURL">Base URL</h:label>
-                  <h:div class="field">
-                    <h:input id="local-translate-baseURL" placeholder="https://api.deepseek.com/v1"/>
-                  </h:div>
-                </h:div>
-                <h:div class="form-row">
-                  <h:label for="local-translate-model">模型</h:label>
-                  <h:div class="field">
-                    <h:input id="local-translate-model" placeholder="deepseek-flash"/>
-                  </h:div>
-                </h:div>
-                <h:div class="form-row">
-                  <h:label for="local-translate-apiKey">API 密钥</h:label>
-                  <h:div class="field">
-                    <h:input id="local-translate-apiKey" type="password" autocomplete="off" placeholder="输入 API 密钥"/>
+              <h:div class="service-layout">
+                <h:div class="service-config">
+                  <h:h3>翻译 API</h:h3>
+                  <h:div id="local-translate-custom-api">
+                    <h:div class="form-row">
+                      <h:label for="local-translate-baseURL">Base URL</h:label>
+                      <h:div class="field">
+                        <h:input id="local-translate-baseURL" placeholder="https://api.deepseek.com/v1"/>
+                      </h:div>
                     </h:div>
+                    <h:div class="form-row">
+                      <h:label for="local-translate-model">模型</h:label>
+                      <h:div class="field">
+                        <h:input id="local-translate-model" placeholder="deepseek-flash"/>
+                      </h:div>
+                    </h:div>
+                    <h:div class="form-row">
+                      <h:label for="local-translate-apiKey">API 密钥</h:label>
+                      <h:div class="field">
+                        <h:input id="local-translate-apiKey" type="password" autocomplete="off" placeholder="输入 API 密钥"/>
+                      </h:div>
+                    </h:div>
+                  </h:div>
+                  <h:div class="form-row">
+                    <h:label for="local-translate-thinking">思考模式</h:label>
+                    <h:div class="field">
+                      <h:select id="local-translate-thinking">
+                        <h:option value="disabled">关闭</h:option>
+                        <h:option value="enabled">开启</h:option>
+                        <h:option value="default">使用 API 默认值</h:option>
+                      </h:select>
+                      <h:p class="field-hint">模型须支持所选参数；使用 API 默认值时不发送思考参数</h:p>
+                    </h:div>
+                  </h:div>
+                  <h:div class="form-row">
+                    <h:label for="local-translate-thinkingProtocol">参数协议</h:label>
+                    <h:div class="field">
+                      <h:select id="local-translate-thinkingProtocol">
+                        <h:option value="auto">自动识别官方接口</h:option>
+                        <h:option value="thinking">thinking · DeepSeek / 兼容网关</h:option>
+                        <h:option value="enable_thinking">enable_thinking · Qwen / 兼容网关</h:option>
+                        <h:option value="reasoning_effort">reasoning_effort · OpenAI / 兼容网关</h:option>
+                      </h:select>
+                      <h:p class="field-hint">第三方接口可手动选择协议；reasoning_effort 关闭时发送 none，需模型支持</h:p>
+                    </h:div>
+                  </h:div>
+                  <h:div class="form-row" id="local-translate-reasoning-effort-row">
+                    <h:label for="local-translate-reasoningEffort">思考强度</h:label>
+                    <h:div class="field"><h:select id="local-translate-reasoningEffort">
+                        <h:option value="low">低</h:option><h:option value="medium">中</h:option><h:option value="high">高</h:option>
+                      </h:select></h:div>
+                  </h:div>
+                  <h:div class="inline-actions">
+                    <h:button type="button" id="local-translate-test-api" aria-describedby="local-translate-test-api-hint">测试 API（少量用量）</h:button>
+                    <h:p id="local-translate-test-api-hint" class="field-hint" hidden="hidden" aria-live="polite"/>
+                  </h:div>
                 </h:div>
-              </h:div>
-              <h:div class="form-row">
-                <h:label for="local-translate-thinking">思考模式</h:label>
-                <h:div class="field">
-                  <h:select id="local-translate-thinking">
-                    <h:option value="disabled">关闭</h:option>
-                    <h:option value="enabled">开启</h:option>
-                    <h:option value="default">使用 API 默认值</h:option>
-                  </h:select>
-                  <h:p class="field-hint">模型须支持所选参数；使用 API 默认值时不发送思考参数</h:p>
+                <h:div class="settings-preview" hidden="hidden">
+                  <h:div class="preview-header">
+                    <h:h3>API 请求预览</h:h3>
+                    <h:button type="button" id="local-translate-copy-request" title="复制到剪贴板">复制</h:button>
+                  </h:div>
+                  <h:pre id="local-translate-request-preview" contenteditable="true" spellcheck="false"><h:code></h:code></h:pre>
+                  <h:button type="button" id="local-translate-apply-preview">应用修改</h:button>
                 </h:div>
-              </h:div>
-              <h:div class="form-row">
-                <h:label for="local-translate-thinkingProtocol">参数协议</h:label>
-                <h:div class="field">
-                  <h:select id="local-translate-thinkingProtocol">
-                    <h:option value="auto">自动识别官方接口</h:option>
-                    <h:option value="thinking">thinking · DeepSeek / 兼容网关</h:option>
-                    <h:option value="enable_thinking">enable_thinking · Qwen / 兼容网关</h:option>
-                    <h:option value="reasoning_effort">reasoning_effort · OpenAI / 兼容网关</h:option>
-                  </h:select>
-                  <h:p class="field-hint">第三方接口可手动选择协议；reasoning_effort 关闭时发送 none，需模型支持</h:p>
-                </h:div>
-              </h:div>
-              <h:div class="form-row" id="local-translate-reasoning-effort-row">
-                <h:label for="local-translate-reasoningEffort">思考强度</h:label>
-                <h:div class="field"><h:select id="local-translate-reasoningEffort">
-                  <h:option value="low">低</h:option><h:option value="medium">中</h:option><h:option value="high">高</h:option>
-                </h:select></h:div>
-              </h:div>
-              <h:div class="inline-actions">
-                <h:button type="button" id="local-translate-test-api" aria-describedby="local-translate-test-api-hint">测试 API（少量用量）</h:button>
-                <h:p id="local-translate-test-api-hint" class="field-hint" hidden="hidden" aria-live="polite"/>
               </h:div>
             </h:section>
             <h:section class="settings-group">
               <h:h3>请求与速度</h:h3>
               <h:div class="form-row">
-                <h:label for="local-translate-qps">每秒请求数</h:label>
+                <h:label for="local-translate-rpm">每分钟请求数</h:label>
                 <h:div class="field">
-                  <h:input id="local-translate-qps" type="number" min="1" max="100"/>
+                  <h:input id="local-translate-rpm" type="number" min="1" max="6000"/>
+                  <h:p class="field-hint">RPM=60 表示每秒1次；RPM=30 表示每2秒1次</h:p>
                 </h:div>
               </h:div>
               <h:div class="form-row">
@@ -313,6 +326,7 @@
             </h:section>
           </h:section>
         </h:form>
+      </h:div>
       </h:div>
       <h:div class="settings-actions">
         <h:div id="local-translate-engine-state" hidden="hidden">

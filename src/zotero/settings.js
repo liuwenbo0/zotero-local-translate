@@ -4,7 +4,7 @@ Object.defineProperties(LocalTranslate, Object.getOwnPropertyDescriptors({
   get settings() {
     const defaults = {
       baseURL: "https://api.deepseek.com/v1", model: "deepseek-flash",
-      langIn: "en", langOut: "zh", qps: 4, timeout: 180, thinking: "default", thinkingProtocol: "auto", reasoningEffort: "medium",
+      langIn: "en", langOut: "zh", rpm: 240, timeout: 180, thinking: "default", thinkingProtocol: "auto", reasoningEffort: "medium",
       askOnNew: true, includeSubcollections: true, skipExisting: true,
       maxWorkers: 0, minTextLength: 5, autoExtractGlossary: true,
       customPrompt: "", fontFamily: "auto", ignoreCache: false,
@@ -15,6 +15,8 @@ Object.defineProperties(LocalTranslate, Object.getOwnPropertyDescriptors({
       figureTableProtectionThreshold: 0.9,
     };
     const saved = JSON.parse(Zotero.Prefs.get("extensions.localpdftranslate.settings", true) || "{}");
+    // Preserve the saved request rate when upgrading from QPS to RPM.
+    if (saved.rpm == null && Number.isInteger(saved.qps)) saved.rpm = saved.qps * 60;
     // Removed options and old machine-specific paths must not reach the engine.
     return Object.fromEntries(Object.entries(defaults).map(([key, value]) => [key, saved[key] ?? value]));
   },
@@ -48,7 +50,7 @@ Object.defineProperties(LocalTranslate, Object.getOwnPropertyDescriptors({
   async saveSettings(settings, key) {
     // The caller's preference sandbox may disappear while the login manager is saving.
     settings = JSON.parse(JSON.stringify(settings));
-    if (!Number.isInteger(settings.qps) || settings.qps < 1 || settings.qps > 100) throw new Error("QPS 应为 1–100 的整数");
+    if (!Number.isInteger(settings.rpm) || settings.rpm < 1 || settings.rpm > 6000) throw new Error("RPM 应为 1–6000 的整数");
     if (!Number.isInteger(settings.timeout) || settings.timeout < 1) throw new Error("超时时间必须为正整数");
     for (const [name, label] of [["maxWorkers", "并行线程"], ["minTextLength", "最短文本长度"], ["maxPagesPerPart", "分块页数"]]) {
       if (!Number.isInteger(settings[name]) || settings[name] < 0) throw new Error(label + "须为非负整数");

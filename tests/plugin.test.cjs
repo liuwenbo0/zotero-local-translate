@@ -92,11 +92,23 @@ test('enqueue and retry respect a paused queue', async () => {
 
 test('settings validate real engine limits before saving', async () => {
   const f=fixture(); const settings=f.plugin.settings;
+  await assert.rejects(f.plugin.saveSettings({...settings,rpm:0}), /RPM/);
+  await assert.rejects(f.plugin.saveSettings({...settings,rpm:6001}), /RPM/);
+  await assert.rejects(f.plugin.saveSettings({...settings,rpm:1.5}), /RPM/);
   await assert.rejects(f.plugin.saveSettings({...settings,maxPagesPerPart:49}), /至少 50/);
   await assert.rejects(f.plugin.saveSettings({...settings,shortLineSplitFactor:0.05}), /0.1/);
   await assert.rejects(f.plugin.saveSettings({...settings,fontFamily:'missing-font'}), /无效选项/);
   await f.plugin.saveSettings({...settings,maxPagesPerPart:50,shortLineSplitFactor:0.1,figureTableProtectionThreshold:0});
   assert.equal(f.plugin.settings.maxPagesPerPart,50);
+});
+
+test('saved QPS limits migrate to RPM while explicit RPM takes precedence', () => {
+  const f=fixture();
+  f.settings.set('extensions.localpdftranslate.settings', JSON.stringify({qps:3}));
+  assert.equal(f.plugin.settings.rpm,180);
+  assert.ok(!('qps' in f.plugin.settings));
+  f.settings.set('extensions.localpdftranslate.settings', JSON.stringify({qps:3,rpm:30}));
+  assert.equal(f.plugin.settings.rpm,30);
 });
 
 test('retrying an earlier failed job while another runs is picked up by the same queue', async () => {
@@ -347,6 +359,12 @@ test('preparation fraction never advances the PDF translation percentage', async
     receive({type:'progress',stage:'Translate',progress:20});
     assert.equal(f.plugin.jobs[0].preparing,false);
     assert.equal(f.plugin.jobs[0].progress,19.4);
+    receive({type:'progress',stage:'Translate',progress:null,stageProgress:50});
+    assert.equal(f.plugin.jobs[0].progress,48.5);
+    receive({type:'progress',stage:'Translate',progress:25});
+    assert.equal(f.plugin.jobs[0].progress,48.5);
+    receive({type:'progress',stage:'Layout',progress:null,stageProgress:100});
+    assert.equal(f.plugin.jobs[0].progress,97);
     return {outputs:{}};
   };
   await f.plugin.runQueue(); assert.equal(f.plugin.jobs[0].status,'completed');

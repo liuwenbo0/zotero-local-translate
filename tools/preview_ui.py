@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 import xml.etree.ElementTree as ET
+from urllib.parse import quote
 from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,7 +56,7 @@ const demo = { version:PLUGIN_VERSION, settings:DEFAULT_SETTINGS, paused:true, w
     {id:'done',title:'A survey of retrieval-augmented generation',language:'zh',status:'completed',progress:100},
     {id:'queued',title:'Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks',language:'zh',status:'queued'},
     {id:'failed',title:'A document that needs attention',language:'zh',status:'failed',error:'API request failed: the configured service rejected the request. Check the model and API settings, then retry.'},
-    {id:'active',title:'Attention Is All You Need — A long document title to verify wrapping and progress updates',language:'zh',status:'running',progress:38,stage:'翻译段落'}],
+    {id:'active',title:'Attention Is All You Need — A long document title to verify wrapping and progress updates',language:'zh',status:'running',progress:38,stage:'翻译段落',stageCurrent:12,stageTotal:40}],
   changed(){window.renderTasks?.(); for(const view of this.preferences) view.renderEngine();}, persist:async()=>{}, runQueue:async()=>{},
   saveSettings:async function(settings){this.settings=settings;},
   loadPreferenceKey:async()=>{},
@@ -75,13 +76,7 @@ const demo = { version:PLUGIN_VERSION, settings:DEFAULT_SETTINGS, paused:true, w
 if(new URLSearchParams(location.search).has("empty")) demo.jobs=[];
 var Zotero = {LocalTranslate:demo,UIProperties:{registerRoot(){}},
   getActiveZoteroPane:()=>({selectItem:()=>message('预览模式：不会操作 Zotero。')})};
-function previewTheme(dark){
-  document.documentElement.style.colorScheme=dark?'dark':'light';
-  document.getElementById('preview-theme').textContent=':root{'+THEMES[dark?1:0]+'color-scheme:'+(dark?'dark':'light')+'}';
-}
-previewTheme(false);
 """.replace("DEFAULT_SETTINGS", json.dumps(settings, ensure_ascii=False))
-    .replace("THEMES", json.dumps(themes))
     .replace(
         "PLUGIN_VERSION",
         json.dumps(json.loads((ROOT / "addon/manifest.json").read_text())["version"]),
@@ -95,7 +90,9 @@ preview_css = """
 html,body{margin:0;font:13px/1.4 system-ui;color:var(--fill-primary);background:var(--color-sidepane)}
 .preview-controls{display:flex;gap:8px;align-items:center;padding:14px 20px}
 .preview-controls span{margin-right:auto;color:var(--fill-secondary)}
-#preview-prefs{max-width:600px;padding:24px;margin:auto;background:var(--color-background)}\n.translate-window{width:min(940px,100vw - 40px);height:650px;margin:0 auto 20px;background:var(--color-background);border:1px solid var(--color-border)}
+#prefs-content{display:flex;flex-direction:column;height:calc(100vh - 66px);min-height:360px;margin:0 20px 20px}
+#preview-prefs{display:flex;flex-direction:column;background:var(--color-background);border:1px solid var(--color-border);overflow:hidden}
+.translate-window{width:min(940px,calc(100vw - 40px));height:650px;margin:0 auto 20px;background:var(--color-background);border:1px solid var(--color-border)}
 """
 style_files = re.findall(
     r'chrome://localtranslate/content/ui/([^" ]+\.css)',
@@ -103,7 +100,13 @@ style_files = re.findall(
 )
 styles = "\n".join((ui / name).read_text() for name in style_files)
 styles += "\n" + (ui / "settings.css").read_text()
-assert "#local-translate-settings-form" in styles and "#task-detail" in styles
+# The installed add-on resolves these through Zotero's chrome protocol. The standalone
+# preview has no chrome registry, so inline the same SVG assets for visual verification.
+for icon in sorted((ui / "icons").glob("*.svg")):
+    chrome_url = f"chrome://localtranslate/content/ui/icons/{icon.name}"
+    data_url = "data:image/svg+xml," + quote(icon.read_text(), safe="")
+    styles = styles.replace(chrome_url, data_url)
+assert "#local-translate-settings-form" in styles and ".task-progress" in styles
 body = (
     '<input id="prefs-search" hidden><div id="preview-tasks">'
     + body
@@ -122,10 +125,10 @@ window.addEventListener('load',()=>{
 output.parent.mkdir(exist_ok=True)
 output.write_text(
     '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>翻译窗口预览</title>'
-    f'<style id="preview-theme">:root{{{themes[0]}color-scheme:light}}</style>'
+    f'<style>:root{{{themes[0]}}}@media (prefers-color-scheme: dark){{:root{{{themes[1]}}}}}</style>'
     f"<style>{styles}\n{preview_css}</style>"
     '<div class="preview-controls"><span>界面预览 · 使用示例任务，不连接 API</span>'
-    '<a href="?settings">设置</a><a href="?tasks">任务</a><button onclick="previewTheme(false)">浅色</button><button onclick="previewTheme(true)">深色</button></div>'
+    '<a href="?settings">设置</a><a href="?tasks">任务</a></div>'
     f"{body}<script>{mock}\n{scripts}</script></html>"
 )
 print(output)

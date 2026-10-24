@@ -13,16 +13,8 @@
     <h:section id="tasks" aria-label="翻译任务">
       <h:div class="toolbar">
         <h:div class="queue-status"><h:span id="summary" role="status" aria-live="polite"/><h:span id="queue-state"/></h:div>
-        <h:span class="spacer"/>
-        <h:button id="pause">暂停队列</h:button>
-        <h:button id="clear-queue">清空队列</h:button>
+        <h:div class="toolbar-actions"><h:button id="pause">暂停队列</h:button><h:button id="clear-queue">清空队列</h:button></h:div>
       </h:div>
-      <h:section id="task-detail" aria-labelledby="detail-title" hidden="hidden">
-        <h:div class="detail-heading"><h:h2 id="detail-title"/><h:span id="detail-status"/></h:div>
-        <h:div class="detail-progress"><h:progress id="detail-progress" class="local-translate-progress" max="100"/><h:span id="detail-percent"/></h:div>
-        <h:p id="detail-stage"/>
-        <h:details id="detail-error" class="job-error" hidden="hidden"><h:summary>错误详情</h:summary><h:pre id="detail-error-text"/></h:details>
-      </h:section>
       <h:div id="empty">
         <h:p>尚无翻译任务</h:p>
         <h:p class="hint">在 Zotero 中选中文献或 PDF，然后点击“翻译选中条目”。</h:p>
@@ -30,16 +22,21 @@
       <h:div class="table-wrap">
         <h:table id="task-table" role="grid" tabindex="0" aria-label="翻译任务列表" aria-multiselectable="true">
           <h:thead><h:tr>
-            <h:th scope="col" class="selection-column"><h:input id="select-all" type="checkbox" aria-label="全选任务" title="全选 / 取消全选"/></h:th><h:th scope="col">文献</h:th><h:th scope="col">目标语言</h:th><h:th scope="col">状态</h:th>
+            <h:th scope="col" class="selection-column"><h:input id="select-all" type="checkbox" aria-label="全选任务" title="全选 / 取消全选"/></h:th><h:th scope="col">文献</h:th><h:th scope="col">进度</h:th><h:th scope="col">状态</h:th>
           </h:tr></h:thead>
           <h:tbody id="job-list"/>
         </h:table>
       </h:div>
       <h:div class="task-footer">
-        <h:span id="selection-hint">选择任务可查看详情</h:span>
+        <h:span id="selection-hint"/>
         <h:div id="task-actions"/>
       </h:div>
     </h:section>
+    <h:dialog id="error-dialog" aria-labelledby="error-dialog-title">
+      <h:div class="error-dialog-heading"><h:div class="error-dialog-title-group"><h:span class="error-dialog-symbol" aria-hidden="true"/><h:h2 id="error-dialog-title" tabindex="-1" autofocus="autofocus">错误详情</h:h2></h:div><h:button id="error-dialog-close" type="button" aria-label="关闭" title="关闭错误详情">关闭</h:button></h:div>
+      <h:p id="error-dialog-job"/>
+      <h:pre id="error-dialog-text"/>
+    </h:dialog>
     <h:div id="message" role="status" hidden="hidden"/>
   </h:main>
 </window>

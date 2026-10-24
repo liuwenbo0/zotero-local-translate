@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Local PDF Translate",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Translate Zotero PDFs locally with your own OpenAI-compatible API, and attach mono and dual PDFs.",
   "author": "liuwenbo0",
   "icons": {

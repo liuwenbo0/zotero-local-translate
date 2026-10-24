@@ -50,8 +50,18 @@ var TaskView = {
       row.parts.check.checked = this.selectedIDs.has(job.id);
       row.parts.check.setAttribute("aria-label", "选择 " + job.title);
       row.parts.title.textContent = job.title; row.parts.title.title = job.title;
-      row.parts.language.textContent = job.language || "—";
-      row.parts.status.textContent = job.status === "running" && job.preparing ? "准备引擎" : this.labels[job.status] + (["running", "importing"].includes(job.status) ? ` · ${this.percent(job)}%` : "");
+      const active = ["running", "importing"].includes(job.status);
+      const value = job.preparing ? job.preparationProgress : job.progress;
+      const known = active && Number.isFinite(value);
+      row.parts.progressBar.hidden = !active;
+      if (known) row.parts.progressBar.value = this.percent({ progress: value });
+      else row.parts.progressBar.removeAttribute("value");
+      row.parts.progressPercent.textContent = active ? (known ? `${this.percent({ progress: value })}%` : "准备中") : "—";
+      row.parts.progress.classList.toggle("is-empty", !active);
+      row.parts.progressWrap.classList.toggle("is-empty", !active);
+      row.parts.statusContent.textContent = this.statusText(job);
+      row.parts.statusContent.title = this.statusText(job);
+      row.parts.errorButton.hidden = !job.error;
     });
     const all = $("select-all");
     all.checked = !!jobs.length && this.selectedIDs.size === jobs.length;
@@ -70,7 +80,7 @@ var TaskView = {
       else this.select(jobs[next].id);
       this.rows.get(jobs[next].id).scrollIntoView({ block: "nearest" });
     };
-    this.renderDetail(jobs.filter(j => this.selectedIDs.has(j.id)));
+    this.renderActions(jobs.filter(j => this.selectedIDs.has(j.id)));
   },
 
   percent(job) { return Math.round(Math.max(0, Math.min(100, job.progress || 0))); },
@@ -80,6 +90,15 @@ var TaskView = {
     if (/translat|paragraph|sentence/i.test(text)) return "翻译正文";
     if (/layout|parse|formula|table|font|save|typeset|pdf/i.test(text)) return text;
     return text;
+  },
+  statusText(job) {
+    if (job.status === "running" && job.preparing) return "准备引擎";
+    const base = this.labels[job.status] || "未知";
+    if (!["running", "importing"].includes(job.status)) return base;
+    const stage = this.stageLabel(job.stage) || base;
+    const count = Number.isFinite(job.stageCurrent) && Number.isFinite(job.stageTotal) && job.stageTotal > 0 ? `${job.stageCurrent}/${job.stageTotal}` : Number.isFinite(job.stageProgress) ? `${Math.round(Math.max(0, Math.min(100, job.stageProgress)))}%` : "";
+    const part = Number.isFinite(job.partIndex) && Number.isFinite(job.totalParts) && job.totalParts > 1 ? `第 ${job.partIndex}/${job.totalParts} 部分` : "";
+    return [stage, count, part].filter(Boolean).join(" · ");
   },
   select(id) { this.selectedID = id; this.anchorID = id; this.selectedIDs = new Set([id]); this.render(); },
   toggle(id) {
@@ -98,9 +117,20 @@ var TaskView = {
   createRow(job) {
     const make = tag => document.createElementNS("http://www.w3.org/1999/xhtml", tag);
     const row = make("tr"); row.dataset.jobId = job.id; row.id = "local-translate-job-" + job.id;
-    const selection = make("td"), check = make("input"), title = make("td"), language = make("td"), status = make("td");
+    const selection = make("td"), check = make("input"), title = make("td"), progress = make("td"), progressWrap = make("span"), progressBar = make("progress"), progressPercent = make("span"), status = make("td"), statusLine = make("span"), statusContent = make("span"), errorButton = make("button");
+    progressBar.setAttribute("aria-label", "任务进度");
     selection.className = "selection-column"; check.type = "checkbox"; selection.append(check);
-    row.append(selection, title, language, status); row.parts = { check, title, language, status };
+    progress.className = "task-progress-cell"; progressWrap.className = "task-progress"; progressBar.className = "local-translate-progress"; progressBar.max = 100; progressPercent.className = "progress-value"; progressWrap.append(progressBar, progressPercent); progress.append(progressWrap);
+    statusLine.className = "task-status-line"; statusContent.className = "task-status"; errorButton.type = "button"; errorButton.className = "task-error-button"; errorButton.setAttribute("aria-label", "查看错误详情"); errorButton.title = "查看错误详情"; statusLine.append(statusContent, errorButton); status.append(statusLine);
+    row.append(selection, title, progress, status); row.parts = { check, title, progress, progressWrap, progressBar, progressPercent, status, statusLine, statusContent, errorButton };
+    errorButton.onclick = event => {
+      event.stopPropagation();
+      $("error-dialog-job").textContent = job.title;
+      $("error-dialog-text").textContent = job.error || "";
+      // Restore focus to this control on close, rather than outlining the whole grid.
+      errorButton.focus({ preventScroll: true });
+      $("error-dialog").showModal();
+    };
     check.onclick = event => { event.stopPropagation(); if (event.shiftKey) this.range(job.id); else this.toggle(job.id); };
     row.onclick = event => {
       if (event.shiftKey) this.range(job.id);
@@ -111,33 +141,12 @@ var TaskView = {
     return row;
   },
 
-  renderDetail(selected) {
+  renderActions(selected) {
     const job = selected.length === 1 ? selected[0] : null;
-    $("task-detail").hidden = !selected.length;
-    $("selection-hint").textContent = selected.length ? `已选择 ${selected.length} / ${plugin.jobs.length} 个任务` : "选择任务可查看详情";
-    const active = job && ["running", "importing"].includes(job.status);
-    $("detail-progress").parentElement.hidden = !active;
-    $("detail-error").hidden = !job?.error;
-    if (job) {
-      $("detail-title").textContent = job.title; $("detail-title").title = job.title;
-      $("detail-status").textContent = job.status === "running" && job.preparing ? "准备引擎" : this.labels[job.status];
-      const value = job.preparing ? job.preparationProgress : this.percent(job), known = Number.isFinite(value);
-      $("detail-percent").textContent = active && known ? `${Math.round(value)}%` : "";
-      if (known) $("detail-progress").value = value; else $("detail-progress").removeAttribute("value");
-      const stageCount = Number.isFinite(job.stageCurrent) && Number.isFinite(job.stageTotal) && job.stageTotal > 0 ? ` · ${job.stageCurrent}/${job.stageTotal}` : "";
-      const stagePercent = Number.isFinite(job.stageProgress) ? ` · 阶段 ${Math.round(Math.max(0, Math.min(100, job.stageProgress)))}%` : "";
-      const partCount = Number.isFinite(job.partIndex) && Number.isFinite(job.totalParts) && job.totalParts > 1 ? ` · 第 ${job.partIndex}/${job.totalParts} 部分` : "";
-      $("detail-stage").textContent = job.status === "completed" ? "单语与双语 PDF 已保存为子附件" : job.status === "queued" ? "等待前序任务" : this.stageLabel(job.stage) + stagePercent + stageCount + partCount;
-      $("detail-error-text").textContent = job.error || "";
-    } else if (selected.length) {
-      $("detail-title").textContent = `已选择 ${selected.length} 个任务`; $("detail-title").title = ""; $("detail-status").textContent = "";
-      const counts = {};
-      for (const task of selected) counts[task.status] = (counts[task.status] || 0) + 1;
-      $("detail-stage").textContent = Object.entries(counts).map(([status, count]) => `${count} ${this.labels[status]}`).join(" · ");
-    }
+    $("selection-hint").textContent = selected.length ? `已选择 ${selected.length} / ${plugin.jobs.length} 个任务` : "";
     const state = selected.map(j => `${j.id}:${j.status}`).join("|") + ":" + !!plugin.clearing;
     if (this.actionState === state) return;
-    this.actionState = state; $("task-actions").replaceChildren(); $("detail-error").open = false;
+    this.actionState = state; $("task-actions").replaceChildren();
     const button = (label, action) => {
       const node = document.createElementNS("http://www.w3.org/1999/xhtml", "button"); node.textContent = label; node.disabled = !!plugin.clearing;
       node.onclick = () => { message(""); Promise.resolve().then(action).catch(error => message(error.message, true)); }; $("task-actions").append(node);

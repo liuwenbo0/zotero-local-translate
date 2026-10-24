@@ -51,6 +51,20 @@ def _check_spawned_bilibili_request(headers_queue):
         )
 
 
+def _check_spawned_rpm_settings(settings, results_queue):
+    from pdf2zh_next.translator.utils import get_rate_limiter
+
+    settings.validate_settings()
+    results_queue.put(
+        (
+            settings.translation.qps,
+            settings.translation.term_qps,
+            settings.translation.pool_max_workers,
+            get_rate_limiter(settings.translation.qps).min_interval,
+        )
+    )
+
+
 class WorkerTests(unittest.TestCase):
     def payload(self, **options):
         cfg = {
@@ -128,7 +142,7 @@ class WorkerTests(unittest.TestCase):
         payload = self.payload(
             langIn="ja",
             langOut="zh-TW",
-            qps=3,
+            rpm=180,
             timeout=77,
             maxWorkers=6,
             minTextLength=2,
@@ -181,6 +195,39 @@ class WorkerTests(unittest.TestCase):
         self.assertFalse(s.pdf.no_mono)
         self.assertFalse(s.pdf.no_dual)
         self.assertIsNone(s.pdf.pages)
+
+    def test_rpm_converts_to_fractional_qps_for_translation_and_terms(self):
+        for rpm in (1, 30, 60, 61, 240, 6000):
+            with self.subTest(rpm=rpm):
+                s = worker.build_settings(self.payload(rpm=rpm))
+                s.validate_settings()
+                self.assertAlmostEqual(s.translation.qps, rpm / 60)
+                self.assertAlmostEqual(s.translation.term_qps, rpm / 60)
+                self.assertEqual(s.translation.pool_max_workers, (rpm + 59) // 60)
+                self.assertEqual(s.translation.term_pool_max_workers, (rpm + 59) // 60)
+        for rpm in (0, 6001):
+            with (
+                self.subTest(invalid_rpm=rpm),
+                self.assertRaisesRegex(ValueError, "RPM"),
+            ):
+                worker.build_settings(self.payload(rpm=rpm))
+
+    def test_fractional_rpm_preserves_other_engine_validation(self):
+        with self.assertRaises(ValueError):
+            worker.build_settings(self.payload(rpm=30, formulaFontPattern="["))
+
+    def test_spawned_translation_process_preserves_fractional_rpm(self):
+        context = multiprocessing.get_context("spawn")
+        results_queue = context.Queue()
+        process = context.Process(
+            target=_check_spawned_rpm_settings,
+            args=(worker.build_settings(self.payload(rpm=30)), results_queue),
+        )
+        process.start()
+        result = results_queue.get(timeout=15)
+        process.join(timeout=15)
+        self.assertEqual(process.exitcode, 0)
+        self.assertEqual(result, (0.5, 0.5, 1, 2.0))
 
     def test_bilibili_requests_omit_auth_and_openai_fingerprint_headers(self):
         import httpx

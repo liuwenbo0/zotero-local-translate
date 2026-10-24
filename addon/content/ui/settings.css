@@ -1,26 +1,41 @@
-/* A centered pane with its own scroll area; native search keeps normal document flow. */
+/* Full-width header and footer rows surround an inset scrolling form. */
 #prefs-content > .local-translate-preferences {
   box-sizing: border-box;
   width: 100%;
-  max-width: 744px;
+  max-width: none;
+  min-width: 0;
   min-height: 0;
   flex: 1;
-  align-self: center;
-  margin: 0 auto;
-  padding: 16px 28px 0;
+  align-self: stretch;
+  margin: 0;
+  padding: 0;
 }
 
 #prefs-content > .local-translate-preferences > h1 {
   flex: none;
-  margin: 0 0 12px;
+  margin: 0;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--color-border50, ThreeDShadow);
+  background: var(--color-toolbar, Canvas);
+  font-size: 1em;
+  font-weight: 600;
 }
 
 #local-translate-settings {
   --label-width: 96px;
   --field-gap: 16px;
+  container: translate-settings / inline-size;
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+#local-translate-settings .settings-container {
+  display: flex;
+  flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 
@@ -35,9 +50,10 @@
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   flex: none;
-  gap: 4px;
+  gap: 0;
+  margin: 0;
   border-bottom: 1px solid var(--color-border50, ThreeDShadow);
-  margin-bottom: 14px;
+  background: var(--color-toolbar, Canvas);
 }
 #local-translate-settings .settings-nav button {
   min-width: 0;
@@ -49,48 +65,53 @@
   border-radius: 0;
   background: transparent;
 }
+#local-translate-settings .settings-nav button + button {
+  border-inline-start: 1px solid var(--color-border, ThreeDShadow);
+}
+
 #local-translate-settings .settings-nav button[aria-selected="true"] {
   border-bottom-color: var(--accent-blue, Highlight);
   font-weight: 600;
 }
 
 #local-translate-settings-form {
+  box-sizing: border-box;
   flex: 1;
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  margin: 0;
-  padding: 2px 12px 8px 2px;
+  margin: 12px 24px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border, ThreeDShadow);
+  border-radius: 6px;
   scrollbar-gutter: stable;
 }
 
-#local-translate-settings .settings-description {
-  margin: 0 0 16px;
-  color: var(--fill-secondary, GrayText);
-  font-size: 0.92em;
-  line-height: 1.5;
-}
-
 #local-translate-settings .settings-group {
-  margin-top: 20px;
-  padding-top: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--color-border50, ThreeDShadow);
 }
 
 #local-translate-settings section[role="tabpanel"] > .settings-group:first-of-type {
   margin-top: 0;
-  border: 0;
   padding-top: 0;
+  border: 0;
 }
 
-#local-translate-settings .settings-description + .settings-group {
-  margin-top: 0;
-  padding-top: 0;
-  border: 0;
+#local-translate-settings .service-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+  align-items: start;
+  gap: 20px;
+}
+
+#local-translate-settings .service-config {
+  min-width: 0;
 }
 
 #local-translate-settings .settings-group h3 {
-  margin: 0 0 9px;
+  margin: 0 0 6px;
   font-size: 1em;
   font-weight: 600;
 }
@@ -100,11 +121,11 @@
   grid-template-columns: var(--label-width) minmax(0, 1fr);
   align-items: start;
   gap: var(--field-gap);
-  margin: 11px 0;
+  margin: 7px 0;
 }
 
 #local-translate-settings .form-row > label {
-  padding-block: 6px;
+  padding-block: 4px;
   line-height: 1.4;
   text-align: end;
   font-size: 0.92em;
@@ -121,8 +142,8 @@
   width: 100%;
   min-width: 0;
   margin: 0;
-  min-height: 32px;
-  padding: 6px 9px;
+  min-height: 30px;
+  padding: 5px 8px;
   border: 1px solid var(--color-border, ThreeDShadow);
   border-radius: 3px;
   color: var(--fill-primary, CanvasText);
@@ -134,14 +155,14 @@
 }
 
 #local-translate-settings .field-hint {
-  margin: 7px 0 0;
+  margin: 4px 0 0;
   color: var(--fill-secondary, GrayText);
-  font-size: 0.88em;
+  font-size: 0.84em;
   line-height: 1.5;
 }
 
 #local-translate-settings .check-row {
-  margin: 11px 0;
+  margin: 7px 0;
   margin-inline-start: calc(var(--label-width) + var(--field-gap));
 }
 
@@ -195,13 +216,17 @@
 }
 
 #local-translate-settings .settings-actions {
+  display: grid;
+  gap: 8px;
   flex: none;
-  padding: 10px 0 12px;
+  margin: 0;
+  padding: 12px 24px 16px;
   border-top: 1px solid var(--color-border50, ThreeDShadow);
-  background: var(--material-sidepane, Canvas);
+  background: var(--color-toolbar, Canvas);
 }
 #local-translate-settings .save-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -209,6 +234,11 @@
 #local-translate-settings .secondary {
   color: var(--fill-secondary, GrayText);
   font-size: 0.88em;
+}
+#local-translate-settings .save-row button {
+  flex: none;
+  margin-inline-start: auto;
+  white-space: nowrap;
 }
 #local-translate-settings .engine-caption {
   display: flex;
@@ -266,62 +296,89 @@
   display: none !important;
 }
 
-#local-translate-settings input[type="number"] {
-  width: 100%;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 34px;
-  padding-inline: 9px 14px;
-  border: 0;
-  border-radius: 0;
-  background: var(--color-background, Field);
-  color-scheme: light dark;
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-#local-translate-settings .number-control {
-  display: inline-flex;
-  width: 144px;
-  max-width: 100%;
-  min-height: 34px;
+/* The request preview belongs to the translation service tab. */
+#local-translate-settings .settings-preview {
   box-sizing: border-box;
-  overflow: hidden;
-  border: 1px solid var(--color-border, ThreeDShadow);
-  border-radius: 3px;
-  background: var(--color-background, Field);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  position: sticky;
+  top: 0;
+  margin: 0;
+  padding-inline-start: 16px;
+  border-inline-start: 1px solid var(--color-border50, ThreeDShadow);
 }
-#local-translate-settings .number-control:focus-within {
-  border-color: var(--accent-blue, Highlight);
+
+#local-translate-settings .preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 6px;
+}
+
+#local-translate-settings .preview-header h3 {
+  margin: 0;
+  font-size: 0.95em;
+  font-weight: 600;
+}
+
+#local-translate-settings #local-translate-copy-request {
+  min-height: 24px;
+  padding: 2px 10px;
+  font-size: 0.88em;
+}
+
+#local-translate-settings #local-translate-request-preview {
+  min-height: 0;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
+  font-size: 0.85em;
+  line-height: 1.45;
+  white-space: pre;
+  background: var(--color-background, Canvas);
+  color: var(--fill-primary, CanvasText);
+  border: 0;
+  border-radius: 4px;
+  max-height: min(65vh, 520px);
+}
+
+#local-translate-settings #local-translate-request-preview code {
+  font: inherit;
+  color: inherit;
+}
+
+#local-translate-settings #local-translate-request-preview:focus {
   outline: 2px solid var(--accent-blue, Highlight);
   outline-offset: 1px;
 }
-#local-translate-settings .number-control-buttons {
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  width: 27px;
-  margin-inline-start: 4px;
-  border-inline-start: 1px solid var(--color-border, ThreeDShadow);
-  background: var(--color-button, ButtonFace);
+
+#local-translate-settings #local-translate-apply-preview {
+  margin: 6px 0 0;
+  align-self: flex-end;
 }
-#local-translate-settings .number-control-button {
-  display: block;
-  flex: 1 1 50%;
-  min-width: 27px;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  color: var(--fill-primary, CanvasText);
-  background: transparent;
-  font-size: 0.65em;
-  line-height: 1;
+
+@container translate-settings (max-width: 780px) {
+  #local-translate-settings .service-layout {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  #local-translate-settings .settings-preview {
+    position: static;
+    padding: 12px 0 0;
+    border-inline-start: 0;
+    border-top: 1px solid var(--color-border50, ThreeDShadow);
+  }
 }
-#local-translate-settings .number-control-button + .number-control-button {
-  border-top: 1px solid var(--color-border50, ThreeDShadow);
-}
-#local-translate-settings .number-control-button:hover {
-  background: var(--color-button-hover, ButtonHighlight);
+
+#local-translate-settings input[type="number"] {
+  width: 100%;
+  max-width: 144px;
 }
 #local-translate-langIn,
 #local-translate-langOut {
@@ -338,9 +395,6 @@
 }
 
 @media (max-width: 760px) {
-  #prefs-content > .local-translate-preferences {
-    padding-inline: 24px;
-  }
   #local-translate-settings {
     --label-width: 84px;
     --field-gap: 12px;
